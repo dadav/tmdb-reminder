@@ -117,9 +117,10 @@ backend-test-full: test-db-up && test-db-down
 
 # --- Docker Compose --------------------------------------------------------
 
-# Build and start the full stack (reads .env).
+# Pull the published images and start the full stack (reads .env).
+# Set IMAGE_TAG in .env to select a sha-<short-commit> or v<version> tag.
 up:
-    docker compose up -d --build
+    docker compose up -d --pull always
 
 # Stop the stack while preserving PostgreSQL data.
 down:
@@ -138,9 +139,10 @@ logs *service:
 compose-config:
     docker compose config --quiet
 
-# Build both production images.
+# Build both Dockerfiles locally (same contexts CI uses; does not push).
 docker-build:
-    docker compose build api web
+    docker build ./backend
+    docker build ./frontend
 
 # --- Aggregate -------------------------------------------------------------
 

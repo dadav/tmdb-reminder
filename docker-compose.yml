@@ -4,6 +4,11 @@
 # VPN in front of it. PostgreSQL, the API, and the worker stay on the internal
 # network. Migration success gates the API and worker.
 
+# Application images are published to GHCR by CI. IMAGE_TAG selects one tag for
+# both images (default `latest`; use a `sha-*` or `v*` tag for a pinned
+# deployment). The backend image is shared by migrate, api, and worker.
+x-backend-image: &backend-image ghcr.io/dadav/tmdb-reminder-backend:${IMAGE_TAG:-latest}
+
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-tmdb}:${POSTGRES_PASSWORD:-tmdb}@db:5432/${POSTGRES_DB:-tmdb_reminder}
   TMDB_API_KEY: ${TMDB_API_KEY:-}
@@ -34,9 +39,8 @@ services:
       retries: 10
 
   migrate:
-    build:
-      context: ./backend
-    image: tmdb-reminder-backend
+    image: *backend-image
+    pull_policy: always
     command: ["alembic", "upgrade", "head"]
     environment: *backend-env
     depends_on:
@@ -45,9 +49,8 @@ services:
     restart: "no"
 
   api:
-    build:
-      context: ./backend
-    image: tmdb-reminder-backend
+    image: *backend-image
+    pull_policy: always
     command: ["tmdb-reminder-api"]
     environment: *backend-env
     depends_on:
@@ -58,9 +61,8 @@ services:
     restart: unless-stopped
 
   worker:
-    build:
-      context: ./backend
-    image: tmdb-reminder-backend
+    image: *backend-image
+    pull_policy: always
     command: ["tmdb-reminder-worker"]
     environment: *backend-env
     depends_on:
@@ -71,9 +73,8 @@ services:
     restart: unless-stopped
 
   web:
-    build:
-      context: ./frontend
-    image: tmdb-reminder-web
+    image: ghcr.io/dadav/tmdb-reminder-web:${IMAGE_TAG:-latest}
+    pull_policy: always
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:8080"
     depends_on:

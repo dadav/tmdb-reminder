@@ -56,12 +56,36 @@ Worker (APScheduler) ────────────────┼─▶ P
 
 ```bash
 cp .env.example .env       # set POSTGRES_PASSWORD, TMDB_API_KEY, GOTIFY_* etc.
-docker compose up -d --build
+docker compose up -d        # pulls the published images from GHCR
 # open http://127.0.0.1:8080
 ```
 
+Compose pulls prebuilt images from GHCR
+(`ghcr.io/dadav/tmdb-reminder-backend`, `ghcr.io/dadav/tmdb-reminder-web`),
+published by CI on every push to `main` and every `v*` tag. No local build
+is needed.
+
+GHCR packages are private when first created. After the first successful image
+workflow, an owner must open each package on GitHub, select **Package settings**,
+then **Change visibility**, and make both `tmdb-reminder-backend` and
+`tmdb-reminder-web` public. This one-time step enables the anonymous pulls used
+by the Compose quick start. Until then, deployment hosts must authenticate to
+`ghcr.io` before running Compose.
+
 Only `127.0.0.1:${APP_PORT:-8080}` is published. PostgreSQL, the API, and the
 worker stay internal. Migration success gates the API and worker.
+
+### Image tags
+
+`IMAGE_TAG` in `.env` selects one tag for both images (default `latest`):
+
+- `latest` tracks the newest `main` build.
+- `sha-<short-commit>` identifies the commit CI built.
+- `v<version>` identifies a released version tag.
+
+For a pinned deployment, select a `sha-*` or `v*` tag rather than `latest`, then
+run `docker compose up -d`. Container tags can be moved; use an image digest
+when content-level immutability is required.
 
 `TMDB_API_KEY` accepts a v3 API key or a v4 read-access bearer token (auto-detected).
 

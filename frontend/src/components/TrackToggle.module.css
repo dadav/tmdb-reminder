@@ -1,0 +1,27 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: flex-start;
+}
+
+.button {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.button[data-variant="stop"] {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.75rem;
+}

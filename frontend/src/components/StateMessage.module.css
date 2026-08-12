@@ -1,0 +1,32 @@
+.wrap {
+  padding: 1.25rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.wrap[data-tone="error"] {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.wrap[data-tone="warning"] {
+  border-color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.detail {
+  margin: 0.4rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.action {
+  margin-top: 0.75rem;
+}

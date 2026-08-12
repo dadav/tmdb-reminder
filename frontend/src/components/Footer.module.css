@@ -1,0 +1,26 @@
+.footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 2rem 1rem 3rem;
+  border-top: 1px solid var(--border);
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.logoLink {
+  display: inline-flex;
+}
+
+.logo {
+  width: 150px;
+  height: auto;
+}
+
+.notice {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  max-width: 40ch;
+}

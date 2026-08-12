@@ -1,0 +1,959 @@
+{
+  "components": {
+    "schemas": {
+      "ConfigStatus": {
+        "properties": {
+          "app_timezone": {
+            "title": "App Timezone",
+            "type": "string"
+          },
+          "gotify_configured": {
+            "title": "Gotify Configured",
+            "type": "boolean"
+          },
+          "gotify_priority": {
+            "title": "Gotify Priority",
+            "type": "integer"
+          },
+          "reminder_time": {
+            "title": "Reminder Time",
+            "type": "string"
+          },
+          "tmdb_configured": {
+            "title": "Tmdb Configured",
+            "type": "boolean"
+          },
+          "tmdb_language": {
+            "title": "Tmdb Language",
+            "type": "string"
+          },
+          "tmdb_region": {
+            "title": "Tmdb Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tmdb_configured",
+          "gotify_configured",
+          "tmdb_region",
+          "tmdb_language",
+          "app_timezone",
+          "reminder_time",
+          "gotify_priority"
+        ],
+        "title": "ConfigStatus",
+        "type": "object"
+      },
+      "EventKind": {
+        "enum": [
+          "movie_digital",
+          "tv_episode"
+        ],
+        "title": "EventKind",
+        "type": "string"
+      },
+      "GotifyTestResponse": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sent"
+        ],
+        "title": "GotifyTestResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "JobStatus": {
+        "properties": {
+          "failure_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Summary"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "job_name": {
+            "title": "Job Name",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "processed_count": {
+            "default": 0,
+            "title": "Processed Count",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "job_name"
+        ],
+        "title": "JobStatus",
+        "type": "object"
+      },
+      "LivenessResponse": {
+        "properties": {
+          "status": {
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "LivenessResponse",
+        "type": "object"
+      },
+      "MediaType": {
+        "enum": [
+          "movie",
+          "tv"
+        ],
+        "title": "MediaType",
+        "type": "string"
+      },
+      "NextRelease": {
+        "properties": {
+          "episode_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Number"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventKind"
+          },
+          "scheduled_date": {
+            "format": "date",
+            "title": "Scheduled Date",
+            "type": "string"
+          },
+          "season_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season Number"
+          }
+        },
+        "required": [
+          "kind",
+          "scheduled_date"
+        ],
+        "title": "NextRelease",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "properties": {
+          "degraded": {
+            "default": false,
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total_pages": {
+            "title": "Total Pages",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "page",
+          "total_pages",
+          "total_results"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "SearchResultItem": {
+        "properties": {
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "next_release": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "original_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Title"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "poster_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Path"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "release_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Year"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tmdb_id": {
+            "title": "Tmdb Id",
+            "type": "integer"
+          },
+          "tmdb_url": {
+            "title": "Tmdb Url",
+            "type": "string"
+          },
+          "tracking_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TitleStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "media_type",
+          "tmdb_id",
+          "title",
+          "tmdb_url"
+        ],
+        "title": "SearchResultItem",
+        "type": "object"
+      },
+      "StatusResponse": {
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/ConfigStatus"
+          },
+          "degraded": {
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "gotify_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gotify Ok"
+          },
+          "last_jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobStatus"
+            },
+            "title": "Last Jobs",
+            "type": "array"
+          },
+          "pending_deliveries": {
+            "default": 0,
+            "title": "Pending Deliveries",
+            "type": "integer"
+          },
+          "recent_delivery_errors": {
+            "default": 0,
+            "title": "Recent Delivery Errors",
+            "type": "integer"
+          },
+          "tmdb_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdb Ok"
+          },
+          "tracked_active": {
+            "default": 0,
+            "title": "Tracked Active",
+            "type": "integer"
+          },
+          "tracked_history": {
+            "default": 0,
+            "title": "Tracked History",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "degraded",
+          "config"
+        ],
+        "title": "StatusResponse",
+        "type": "object"
+      },
+      "TitleStatus": {
+        "enum": [
+          "active",
+          "completed",
+          "stopped"
+        ],
+        "title": "TitleStatus",
+        "type": "string"
+      },
+      "TitleView": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "last_sync_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync Status"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "next_release": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "original_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Title"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "poster_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Path"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "release_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Year"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TitleStatus"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tmdb_id": {
+            "title": "Tmdb Id",
+            "type": "integer"
+          },
+          "tmdb_url": {
+            "title": "Tmdb Url",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "media_type",
+          "tmdb_id",
+          "title",
+          "status",
+          "tmdb_url",
+          "updated_at"
+        ],
+        "title": "TitleView",
+        "type": "object"
+      },
+      "TrackedListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TitleView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "view": {
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "view",
+          "offset",
+          "limit",
+          "total"
+        ],
+        "title": "TrackedListResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "TMDB Reminder API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/health/live": {
+      "get": {
+        "operationId": "live_api_v1_health_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivenessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/health/ready": {
+      "get": {
+        "operationId": "ready_api_v1_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ready",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "operationId": "search_api_v1_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 2,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "status_api_v1_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "status"
+        ]
+      }
+    },
+    "/api/v1/status/gotify-test": {
+      "post": {
+        "operationId": "gotify_test_api_v1_status_gotify_test_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GotifyTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Gotify Test",
+        "tags": [
+          "status"
+        ]
+      }
+    },
+    "/api/v1/tracked-titles": {
+      "get": {
+        "operationId": "list_tracked_api_v1_tracked_titles_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "pattern": "^(active|history)$",
+              "title": "View",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackedListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tracked",
+        "tags": [
+          "tracked-titles"
+        ]
+      }
+    },
+    "/api/v1/tracked-titles/{media_type}/{tmdb_id}": {
+      "delete": {
+        "operationId": "stop_title_api_v1_tracked_titles__media_type___tmdb_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_type",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MediaType"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tmdb_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Tmdb Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TitleView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Title",
+        "tags": [
+          "tracked-titles"
+        ]
+      },
+      "put": {
+        "operationId": "track_title_api_v1_tracked_titles__media_type___tmdb_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_type",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MediaType"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tmdb_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Tmdb Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TitleView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Track Title",
+        "tags": [
+          "tracked-titles"
+        ]
+      }
+    }
+  }
+}

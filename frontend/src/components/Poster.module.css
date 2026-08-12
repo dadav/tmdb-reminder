@@ -1,0 +1,19 @@
+.image,
+.fallback {
+  width: 92px;
+  height: 138px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+.fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+  border: 1px solid var(--border);
+}

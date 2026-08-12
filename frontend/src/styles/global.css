@@ -1,0 +1,82 @@
+/* Global theme. Colors are CSS variables that flip with the system color scheme.
+   All components consume these tokens so light/dark stays consistent. */
+
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eef0f3;
+  --border: #d7dbe0;
+  --text: #1b1f24;
+  --text-muted: #5b636d;
+  --accent: #0d6efd;
+  --accent-contrast: #ffffff;
+  --danger: #c0392b;
+  --danger-bg: #fdecea;
+  --warning: #8a6d00;
+  --warning-bg: #fff4d6;
+  --success: #1e7d34;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --maxw: 1100px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171b;
+    --surface: #1c2026;
+    --surface-2: #22272e;
+    --border: #333a43;
+    --text: #e8eaed;
+    --text-muted: #9aa4b1;
+    --accent: #4c9aff;
+    --accent-contrast: #08111f;
+    --danger: #ff7369;
+    --danger-bg: #3a1f1c;
+    --warning: #f2cc60;
+    --warning-bg: #352d12;
+    --success: #74d68a;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

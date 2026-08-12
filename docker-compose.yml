@@ -1,0 +1,84 @@
+# TMDB Reminder deployment.
+#
+# Only the web port is published, and only to localhost. Put a trusted proxy or
+# VPN in front of it. PostgreSQL, the API, and the worker stay on the internal
+# network. Migration success gates the API and worker.
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-tmdb}:${POSTGRES_PASSWORD:-tmdb}@db:5432/${POSTGRES_DB:-tmdb_reminder}
+  TMDB_API_KEY: ${TMDB_API_KEY:-}
+  TMDB_REGION: ${TMDB_REGION:-DE}
+  TMDB_LANGUAGE: ${TMDB_LANGUAGE:-en-US}
+  GOTIFY_URL: ${GOTIFY_URL:-}
+  GOTIFY_TOKEN: ${GOTIFY_TOKEN:-}
+  GOTIFY_PRIORITY: ${GOTIFY_PRIORITY:-5}
+  APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Berlin}
+  REMINDER_TIME: ${REMINDER_TIME:-09:00}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tmdb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tmdb}
+      POSTGRES_DB: ${POSTGRES_DB:-tmdb_reminder}
+    volumes:
+      # Postgres 18+ expects a single mount here; data lives in a subdirectory.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tmdb} -d ${POSTGRES_DB:-tmdb_reminder}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: ./backend
+    image: tmdb-reminder-backend
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ./backend
+    image: tmdb-reminder-backend
+    command: ["tmdb-reminder-api"]
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+    image: tmdb-reminder-backend
+    command: ["tmdb-reminder-worker"]
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+    image: tmdb-reminder-web
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

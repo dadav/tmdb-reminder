@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useStatus } from "./api/queries";
 import styles from "./App.module.css";
@@ -8,17 +8,35 @@ import { SearchBar } from "./components/SearchBar";
 import { SearchResults } from "./components/SearchResults";
 import { TrackedPanel } from "./components/TrackedPanel";
 import { useDebouncedValue } from "./hooks/useDebouncedValue";
+import { useI18n } from "./i18n/context";
+import { LocaleProvider } from "./i18n/LocaleProvider";
 import type { RelativeDateContext } from "./lib/format";
+import { browserLanguages, resolveBrowserLocale, resolveLocale } from "./lib/locale";
 
 const SEARCH_DEBOUNCE_MS = 350;
 const NOW_REFRESH_MS = 60_000;
 
-export function App() {
-  const [rawQuery, setRawQuery] = useState("");
-  const debouncedQuery = useDebouncedValue(rawQuery, SEARCH_DEBOUNCE_MS);
+/** Bootstraps localization: the browser locale seeds the shell, then
+ *  TMDB_LANGUAGE from status becomes authoritative once it loads. */
+export function Root() {
   const status = useStatus();
-  // Undefined until status loads; Intl then falls back to the browser locale.
-  const dateLocale = status.data?.config.tmdb_language;
+  const locale = useMemo(
+    () =>
+      status.data
+        ? resolveLocale(status.data.config.tmdb_language)
+        : resolveBrowserLocale(browserLanguages()),
+    [status.data],
+  );
+  return (
+    <LocaleProvider locale={locale}>
+      <App />
+    </LocaleProvider>
+  );
+}
+
+export function App() {
+  const { t } = useI18n();
+  const status = useStatus();
   const timeZone = status.data?.config.app_timezone;
 
   const [now, setNow] = useState(() => new Date());
@@ -30,13 +48,14 @@ export function App() {
     ? { now, timeZone }
     : undefined;
 
+  const [rawQuery, setRawQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(rawQuery, SEARCH_DEBOUNCE_MS);
+
   return (
     <div className={styles.app}>
       <header className={styles.header}>
-        <h1 className={styles.brand}>TMDB Reminder</h1>
-        <p className={styles.tagline}>
-          Track movies and TV shows and get a Gotify reminder the day before release.
-        </p>
+        <h1 className={styles.brand}>{t("app.brand")}</h1>
+        <p className={styles.tagline}>{t("app.tagline")}</p>
       </header>
 
       <main className={styles.main}>
@@ -44,22 +63,19 @@ export function App() {
         <SearchResults
           rawQuery={rawQuery}
           debouncedQuery={debouncedQuery}
-          dateLocale={dateLocale}
           relativeDateContext={relativeDateContext}
         />
         <TrackedPanel
           view="active"
-          title="Tracking"
-          emptyMessage="Nothing tracked yet."
-          dateLocale={dateLocale}
+          title={t("tracking.activeSection")}
+          emptyMessage={t("tracking.activeEmpty")}
           relativeDateContext={relativeDateContext}
         />
         <TrackedPanel
           view="history"
-          title="History"
-          emptyMessage="No stopped or completed titles."
+          title={t("tracking.historySection")}
+          emptyMessage={t("tracking.historyEmpty")}
           collapsible
-          dateLocale={dateLocale}
           relativeDateContext={relativeDateContext}
         />
         <Diagnostics />

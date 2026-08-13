@@ -1,4 +1,5 @@
 import { MIN_QUERY_LENGTH, useSearch } from "../api/queries";
+import { useI18n } from "../i18n/context";
 import type { RelativeDateContext } from "../lib/format";
 import { ResultCard } from "./ResultCard";
 import styles from "./SearchResults.module.css";
@@ -8,16 +9,15 @@ import { StateMessage } from "./StateMessage";
 interface SearchResultsProps {
   rawQuery: string;
   debouncedQuery: string;
-  dateLocale?: string;
   relativeDateContext?: RelativeDateContext;
 }
 
 export function SearchResults({
   rawQuery,
   debouncedQuery,
-  dateLocale,
   relativeDateContext,
 }: SearchResultsProps) {
+  const { t } = useI18n();
   const search = useSearch(debouncedQuery);
   const trimmed = debouncedQuery.trim();
   const results = search.data?.pages.flatMap((page) => page.results) ?? [];
@@ -26,31 +26,27 @@ export function SearchResults({
   const tooShort = rawQuery.trim().length > 0 && rawQuery.trim().length < MIN_QUERY_LENGTH;
 
   return (
-    <Section title="Search">
+    <Section title={t("search.section")}>
       {tooShort && (
-        <StateMessage tone="info" title={`Type at least ${MIN_QUERY_LENGTH} characters to search.`} />
+        <StateMessage tone="info" title={t("search.tooShort", { min: MIN_QUERY_LENGTH })} />
       )}
 
       {trimmed.length < MIN_QUERY_LENGTH && !tooShort && (
-        <StateMessage
-          tone="muted"
-          title="Find something to track"
-          detail="Search TMDB for a movie or TV show, then start tracking it."
-        />
+        <StateMessage tone="muted" title={t("search.emptyTitle")} detail={t("search.emptyDetail")} />
       )}
 
       {trimmed.length >= MIN_QUERY_LENGTH && search.isPending && (
-        <StateMessage tone="muted" title="Searching…" />
+        <StateMessage tone="muted" title={t("search.searching")} />
       )}
 
       {search.isError && (
         <StateMessage
           tone="error"
-          title="Search failed."
-          detail="TMDB might be unavailable."
+          title={t("search.failedTitle")}
+          detail={t("search.failedDetail")}
           action={
             <button type="button" onClick={() => void search.refetch()}>
-              Retry
+              {t("actions.retry")}
             </button>
           }
         />
@@ -59,13 +55,17 @@ export function SearchResults({
       {degraded && (
         <StateMessage
           tone="warning"
-          title="Search is unavailable."
-          detail="TMDB credentials are not configured on the server."
+          title={t("search.degradedTitle")}
+          detail={t("search.degradedDetail")}
         />
       )}
 
       {search.isSuccess && !degraded && results.length === 0 && (
-        <StateMessage tone="muted" title="No results." detail={`Nothing matched “${trimmed}”.`} />
+        <StateMessage
+          tone="muted"
+          title={t("search.noResultsTitle")}
+          detail={t("search.noResultsDetail", { query: trimmed })}
+        />
       )}
 
       {results.length > 0 && (
@@ -75,7 +75,6 @@ export function SearchResults({
               <ResultCard
                 key={`${item.media_type}-${item.tmdb_id}`}
                 item={item}
-                dateLocale={dateLocale}
                 relativeDateContext={relativeDateContext}
               />
             ))}
@@ -87,7 +86,7 @@ export function SearchResults({
               onClick={() => void search.fetchNextPage()}
               disabled={search.isFetchingNextPage}
             >
-              {search.isFetchingNextPage ? "Loading…" : "Load more"}
+              {search.isFetchingNextPage ? t("search.loadingMore") : t("search.loadMore")}
             </button>
           )}
         </>

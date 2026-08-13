@@ -27,11 +27,11 @@ function searchPayload(page: number, items: unknown[], totalPages = 1) {
 
 const SEARCH = "/api/v1/search";
 
-describe("SearchResults", () => {
+describe("SearchResults (German)", () => {
   it("prompts to type more when the query is too short", () => {
     installFetch([]);
     renderWithClient(<SearchResults rawQuery="a" debouncedQuery="a" />);
-    expect(screen.getByText(/type at least 2 characters/i)).toBeInTheDocument();
+    expect(screen.getByText(/mindestens 2 zeichen/i)).toBeInTheDocument();
   });
 
   it("renders results returned by the API", async () => {
@@ -45,7 +45,7 @@ describe("SearchResults", () => {
   it("shows an empty state when there are no results", async () => {
     installFetch([{ method: "GET", match: pathIs(SEARCH), json: searchPayload(1, []) }]);
     renderWithClient(<SearchResults rawQuery="zzz" debouncedQuery="zzz" />);
-    expect(await screen.findByText(/no results/i)).toBeInTheDocument();
+    expect(await screen.findByText(/keine ergebnisse/i)).toBeInTheDocument();
   });
 
   it("shows a degraded warning when TMDB is not configured", async () => {
@@ -57,7 +57,7 @@ describe("SearchResults", () => {
       },
     ]);
     renderWithClient(<SearchResults rawQuery="matrix" debouncedQuery="matrix" />);
-    expect(await screen.findByText(/search is unavailable/i)).toBeInTheDocument();
+    expect(await screen.findByText(/suche nicht verfügbar/i)).toBeInTheDocument();
   });
 
   it("shows a retryable error state on failure", async () => {
@@ -70,8 +70,8 @@ describe("SearchResults", () => {
       },
     ]);
     renderWithClient(<SearchResults rawQuery="matrix" debouncedQuery="matrix" />);
-    expect(await screen.findByText(/search failed/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+    expect(await screen.findByText(/suche fehlgeschlagen/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /erneut versuchen/i })).toBeInTheDocument();
   });
 
   it("loads more pages on demand", async () => {
@@ -91,7 +91,7 @@ describe("SearchResults", () => {
     renderWithClient(<SearchResults rawQuery="matrix" debouncedQuery="matrix" />);
     expect(await screen.findByText("First")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /load more/i }));
+    await userEvent.click(screen.getByRole("button", { name: /mehr laden/i }));
     await waitFor(() => expect(screen.getByText("Second")).toBeInTheDocument());
   });
 
@@ -100,7 +100,7 @@ describe("SearchResults", () => {
       { method: "GET", match: pathIs(SEARCH), json: searchPayload(1, []) },
     ]);
     renderWithClient(<SearchResults rawQuery="matrix" debouncedQuery="matrix" />);
-    await screen.findByText(/no results/i);
+    await screen.findByText(/keine ergebnisse/i);
     const searchCall = calls.find((c) => c.url.pathname === SEARCH);
     expect(searchCall?.signal).toBeInstanceOf(AbortSignal);
   });

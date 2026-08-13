@@ -104,6 +104,12 @@ See [`.env.example`](.env.example). Defaults: `TMDB_REGION=DE`,
 `TMDB_LANGUAGE=en-US`, `APP_TIMEZONE=Europe/Berlin`, `REMINDER_TIME=09:00`,
 `GOTIFY_PRIORITY=5`. Secrets are environment-only.
 
+`TMDB_LANGUAGE` controls both the TMDB content language and the browser UI
+language. English (`en-*`) and German (`de-*`) are fully localized; any other or
+invalid value falls back to the English UI. Before status loads, the browser
+locale seeds the UI; afterwards `TMDB_LANGUAGE` is authoritative. The full
+regional tag (e.g. `de-AT`) is still used for date, time, and number formatting.
+
 ## Development
 
 ### Backend

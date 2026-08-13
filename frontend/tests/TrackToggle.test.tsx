@@ -21,23 +21,23 @@ function titleView(status: string) {
   };
 }
 
-describe("TrackToggle", () => {
-  it("labels the action Track when the title is untracked", () => {
+describe("TrackToggle (German)", () => {
+  it("labels the action Merken when the title is untracked", () => {
     installFetch([]);
     renderWithClient(<TrackToggle mediaType="movie" tmdbId={603} status={null} />);
-    expect(screen.getByRole("button", { name: /track/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Merken" })).toBeInTheDocument();
   });
 
-  it("labels the action Resume for a stopped title", () => {
+  it("labels the action Erneut merken for a stopped title", () => {
     installFetch([]);
     renderWithClient(<TrackToggle mediaType="movie" tmdbId={603} status="stopped" />);
-    expect(screen.getByRole("button", { name: /resume/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Erneut merken" })).toBeInTheDocument();
   });
 
-  it("labels the action Stop for an active title", () => {
+  it("labels the action Entfernen for an active title", () => {
     installFetch([]);
     renderWithClient(<TrackToggle mediaType="movie" tmdbId={603} status="active" />);
-    expect(screen.getByRole("button", { name: /stop/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entfernen" })).toBeInTheDocument();
   });
 
   it("issues a PUT when tracking and disables the button while pending", async () => {
@@ -45,7 +45,7 @@ describe("TrackToggle", () => {
       { method: "PUT", match: (url) => url.pathname === TRACK_PATH, json: titleView("active"), delayMs: 20 },
     ]);
     renderWithClient(<TrackToggle mediaType="movie" tmdbId={603} status={null} />);
-    const button = screen.getByRole("button", { name: /track/i });
+    const button = screen.getByRole("button", { name: "Merken" });
     await userEvent.click(button);
     expect(button).toBeDisabled();
     await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
@@ -56,11 +56,11 @@ describe("TrackToggle", () => {
       { method: "DELETE", match: (url) => url.pathname === TRACK_PATH, json: titleView("stopped") },
     ]);
     renderWithClient(<TrackToggle mediaType="movie" tmdbId={603} status="active" />);
-    await userEvent.click(screen.getByRole("button", { name: /stop/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Entfernen" }));
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
   });
 
-  it("surfaces an error when the mutation fails", async () => {
+  it("surfaces a localized error when the mutation fails", async () => {
     installFetch([
       {
         method: "PUT",
@@ -70,7 +70,7 @@ describe("TrackToggle", () => {
       },
     ]);
     renderWithClient(<TrackToggle mediaType="movie" tmdbId={603} status={null} />);
-    await userEvent.click(screen.getByRole("button", { name: /track/i }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/action failed/i);
+    await userEvent.click(screen.getByRole("button", { name: "Merken" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/aktion fehlgeschlagen/i);
   });
 });

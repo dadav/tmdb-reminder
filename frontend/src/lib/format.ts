@@ -1,19 +1,46 @@
 import type { MediaType, NextRelease, TitleStatus } from "../api/types";
+import type { Translate } from "../i18n/context";
 
-export function mediaTypeLabel(mediaType: MediaType): string {
-  return mediaType === "tv" ? "TV" : "Movie";
+export function mediaTypeLabel(mediaType: MediaType, t: Translate): string {
+  return t(mediaType === "tv" ? "media.tv" : "media.movie");
 }
 
-export function statusLabel(status: TitleStatus): string {
-  switch (status) {
-    case "active":
-      return "Tracking";
-    case "completed":
-      return "Completed";
-    case "stopped":
-      return "Stopped";
-    default:
-      return status;
+export function statusLabel(status: TitleStatus, t: Translate): string {
+  // Known statuses are translated; unknown backend values remain visible as-is.
+  return t(`status.${status}`, { defaultValue: status });
+}
+
+export function jobNameLabel(name: string, t: Translate): string {
+  const keys: Record<string, string> = { refresh: "jobs.refresh", delivery: "jobs.delivery" };
+  return keys[name] ? t(keys[name]) : t("jobs.unknown");
+}
+
+export function outcomeLabel(outcome: string | null | undefined, t: Translate): string {
+  if (!outcome) {
+    return t("outcomes.running");
+  }
+  const keys: Record<string, string> = {
+    success: "outcomes.success",
+    partial: "outcomes.partial",
+    failure: "outcomes.failure",
+  };
+  return keys[outcome] ? t(keys[outcome]) : t("outcomes.unknown");
+}
+
+export function isKnownJobName(name: string): boolean {
+  return name === "refresh" || name === "delivery";
+}
+
+export function isKnownOutcome(outcome: string | null | undefined): boolean {
+  return outcome == null || outcome === "success" || outcome === "partial" || outcome === "failure";
+}
+
+/** Locale-aware number formatting with a deterministic raw fallback. */
+export function formatNumber(value: number, formatLocale?: string): string {
+  try {
+    return new Intl.NumberFormat(formatLocale).format(value);
+  } catch {
+    return String(value);
   }
 }
 
@@ -81,8 +108,9 @@ export interface RelativeDateContext {
   timeZone: string;
 }
 
-/** Differences count calendar days in APP_TIMEZONE, not elapsed 24-hour periods. */
-export function relativeDayLabel(isoDate: string, context: RelativeDateContext): string | null {
+/** Signed difference in calendar days (APP_TIMEZONE), not elapsed 24-hour
+ *  periods. Null when either date is unparseable or the timezone is invalid. */
+export function calendarDayDiff(isoDate: string, context: RelativeDateContext): number | null {
   const target = parseCalendarDate(isoDate);
   if (target === null) {
     return null;
@@ -91,44 +119,108 @@ export function relativeDayLabel(isoDate: string, context: RelativeDateContext):
   if (today === null) {
     return null;
   }
-  const diff = Math.round((target.getTime() - today.getTime()) / MS_PER_DAY);
+  return Math.round((target.getTime() - today.getTime()) / MS_PER_DAY);
+}
+
+/** Localized relative-day label with singular/plural forms, or null when the
+ *  difference cannot be computed. */
+export function relativeDayLabel(
+  isoDate: string,
+  context: RelativeDateContext,
+  t: Translate,
+): string | null {
+  const diff = calendarDayDiff(isoDate, context);
+  if (diff === null) {
+    return null;
+  }
   if (diff === 0) {
-    return "today";
+    return t("release.today");
   }
-  if (diff === 1) {
-    return "in 1 day";
+  if (diff > 0) {
+    return t("release.inDays", { count: diff });
   }
-  if (diff > 1) {
-    return `in ${diff} days`;
-  }
-  if (diff === -1) {
-    return "1 day ago";
-  }
-  return `${-diff} days ago`;
+  return t("release.daysAgo", { count: -diff });
 }
 
 export function nextReleaseLabel(
   next: NextRelease | null | undefined,
-  locale?: string,
+  formatLocale: string | undefined,
+  t: Translate,
   context?: RelativeDateContext,
 ): string {
   if (!next) {
-    return "No date yet";
+    return t("release.none");
   }
-  const date = formatCalendarDate(next.scheduled_date, locale);
+  const date = formatCalendarDate(next.scheduled_date, formatLocale);
   let base: string;
   if (next.kind === "tv_episode" && next.season_number != null && next.episode_number != null) {
     const s = String(next.season_number).padStart(2, "0");
     const e = String(next.episode_number).padStart(2, "0");
     base = `S${s}E${e} · ${date}`;
   } else {
-    base = `Digital · ${date}`;
+    base = `${t("release.digital")} · ${date}`;
   }
   if (context) {
-    const relative = relativeDayLabel(next.scheduled_date, context);
+    const relative = relativeDayLabel(next.scheduled_date, context, t);
     if (relative !== null) {
       return `${base} · ${relative}`;
     }
   }
   return base;
+}
+
+/** Format a wall-clock HH:MM time (no timezone conversion) in the given locale.
+ *  Returns the raw value unchanged when it is not a valid HH:MM string. */
+export function formatReminderTime(hhmm: string, formatLocale?: string): string {
+  const match = /^(\d{2}):(\d{2})$/.exec(hhmm);
+  if (!match) {
+    return hhmm;
+  }
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) {
+    return hhmm;
+  }
+  // Anchor to a fixed UTC instant and format in UTC so no zone shift occurs.
+  // timeStyle lets the locale decide 12/24-hour and hour padding.
+  const anchored = new Date(Date.UTC(2000, 0, 1, hour, minute));
+  const options: Intl.DateTimeFormatOptions = {
+    timeStyle: "short",
+    timeZone: "UTC",
+  };
+  try {
+    return new Intl.DateTimeFormat(formatLocale, options).format(anchored);
+  } catch {
+    return new Intl.DateTimeFormat(undefined, options).format(anchored);
+  }
+}
+
+/** Format a diagnostic instant using the full locale and APP_TIMEZONE. Returns a
+ *  localized "never" when empty, and the raw value when it cannot be parsed. */
+export function formatInstant(
+  value: string | null | undefined,
+  formatLocale: string | undefined,
+  timeZone: string | undefined,
+  t: Translate,
+): string {
+  if (!value) {
+    return t("diagnostics.never");
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  const options: Intl.DateTimeFormatOptions = {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone,
+  };
+  try {
+    return new Intl.DateTimeFormat(formatLocale, options).format(parsed);
+  } catch {
+    // An invalid locale or timezone throws a RangeError; retry without them.
+    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+      parsed,
+    );
+  }
 }

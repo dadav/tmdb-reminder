@@ -1,4 +1,5 @@
 import type { TitleView } from "../api/types";
+import { useI18n } from "../i18n/context";
 import { nextReleaseLabel, statusLabel, type RelativeDateContext } from "../lib/format";
 import type { Badge } from "./MediaCard";
 import { MediaCard } from "./MediaCard";
@@ -6,16 +7,15 @@ import { TrackToggle } from "./TrackToggle";
 
 export function TitleCard({
   title,
-  dateLocale,
   relativeDateContext,
 }: {
   title: TitleView;
-  dateLocale?: string;
   relativeDateContext?: RelativeDateContext;
 }) {
-  const badges: Badge[] = [{ label: statusLabel(title.status), tone: title.status }];
+  const { t, formatLocale } = useI18n();
+  const badges: Badge[] = [{ label: statusLabel(title.status, t), tone: title.status }];
   if (title.last_sync_status === "error") {
-    badges.push({ label: "Sync error", tone: "warning" });
+    badges.push({ label: t("badge.syncError"), tone: "warning" });
   }
 
   return (
@@ -26,7 +26,7 @@ export function TitleCard({
       year={title.release_year}
       overview={title.overview}
       tmdbUrl={title.tmdb_url}
-      releaseLabel={nextReleaseLabel(title.next_release, dateLocale, relativeDateContext)}
+      releaseLabel={nextReleaseLabel(title.next_release, formatLocale, t, relativeDateContext)}
       badges={badges}
       actions={
         <TrackToggle mediaType={title.media_type} tmdbId={title.tmdb_id} status={title.status} />

@@ -1,4 +1,5 @@
 import type { SearchResultItem } from "../api/types";
+import { useI18n } from "../i18n/context";
 import { nextReleaseLabel, statusLabel, type RelativeDateContext } from "../lib/format";
 import type { Badge } from "./MediaCard";
 import { MediaCard } from "./MediaCard";
@@ -6,15 +7,14 @@ import { TrackToggle } from "./TrackToggle";
 
 export function ResultCard({
   item,
-  dateLocale,
   relativeDateContext,
 }: {
   item: SearchResultItem;
-  dateLocale?: string;
   relativeDateContext?: RelativeDateContext;
 }) {
+  const { t, formatLocale } = useI18n();
   const badges: Badge[] = item.tracking_status
-    ? [{ label: statusLabel(item.tracking_status), tone: item.tracking_status }]
+    ? [{ label: statusLabel(item.tracking_status, t), tone: item.tracking_status }]
     : [];
 
   return (
@@ -25,7 +25,7 @@ export function ResultCard({
       year={item.release_year}
       overview={item.overview}
       tmdbUrl={item.tmdb_url}
-      releaseLabel={nextReleaseLabel(item.next_release, dateLocale, relativeDateContext)}
+      releaseLabel={nextReleaseLabel(item.next_release, formatLocale, t, relativeDateContext)}
       badges={badges}
       actions={
         <TrackToggle

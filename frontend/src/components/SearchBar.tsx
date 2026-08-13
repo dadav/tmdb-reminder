@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n/context";
 import styles from "./SearchBar.module.css";
 
 interface SearchBarProps {
@@ -6,17 +7,18 @@ interface SearchBarProps {
 }
 
 export function SearchBar({ value, onChange }: SearchBarProps) {
+  const { t } = useI18n();
   return (
     <div className={styles.wrap}>
       <label htmlFor="search-input" className={styles.label}>
-        Search movies and TV shows
+        {t("search.label")}
       </label>
       <div className={styles.field}>
         <input
           id="search-input"
           type="search"
           className={styles.input}
-          placeholder="Start typing a title…"
+          placeholder={t("search.placeholder")}
           value={value}
           autoComplete="off"
           onChange={(event) => onChange(event.target.value)}
@@ -25,7 +27,7 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
           <button
             type="button"
             className={styles.clear}
-            aria-label="Clear search"
+            aria-label={t("search.clear")}
             onClick={() => onChange("")}
           >
             ×

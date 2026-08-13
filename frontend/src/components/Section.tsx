@@ -4,7 +4,7 @@ import styles from "./Section.module.css";
 
 interface SectionProps {
   title: string;
-  count?: number;
+  count?: ReactNode;
   children: ReactNode;
   headerExtra?: ReactNode;
 }

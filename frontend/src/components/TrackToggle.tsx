@@ -1,5 +1,6 @@
 import { useStopTitle, useTrackTitle } from "../api/queries";
 import type { MediaType, TitleStatus } from "../api/types";
+import { useI18n } from "../i18n/context";
 import styles from "./TrackToggle.module.css";
 
 interface TrackToggleProps {
@@ -11,6 +12,7 @@ interface TrackToggleProps {
 /** One button that tracks, stops, or resumes a title. Both mutations disable the
  *  button while in flight so conflicting actions cannot overlap. */
 export function TrackToggle({ mediaType, tmdbId, status }: TrackToggleProps) {
+  const { t } = useI18n();
   const track = useTrackTitle();
   const stop = useStopTitle();
   const busy = track.isPending || stop.isPending;
@@ -25,7 +27,7 @@ export function TrackToggle({ mediaType, tmdbId, status }: TrackToggleProps) {
     }
   };
 
-  const label = isActive ? "Stop" : status ? "Resume" : "Track";
+  const label = isActive ? t("actions.stop") : status ? t("actions.resume") : t("actions.track");
 
   return (
     <div className={styles.wrap}>
@@ -36,11 +38,11 @@ export function TrackToggle({ mediaType, tmdbId, status }: TrackToggleProps) {
         onClick={handleClick}
         disabled={busy}
       >
-        {busy ? "Working…" : label}
+        {busy ? t("actions.working") : label}
       </button>
       {(track.isError || stop.isError) && (
         <span className={styles.error} role="alert">
-          Action failed. Try again.
+          {t("actions.failed")}
         </span>
       )}
     </div>

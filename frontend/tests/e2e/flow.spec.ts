@@ -8,12 +8,15 @@ interface ApiMockOptions {
   initialTracked?: Iterable<readonly [number, TrackState]>;
   catalog?: Record<number, string>;
   syncErrorIds?: ReadonlySet<number>;
+  // Drives both TMDB content and the browser UI language once status loads.
+  tmdbLanguage?: string;
 }
 
 function makeApiMock({
   initialTracked = [],
   catalog: catalogOverrides = {},
   syncErrorIds = new Set<number>(),
+  tmdbLanguage = "de-DE",
 }: ApiMockOptions = {}) {
   const tracked = new Map<number, TrackState>(initialTracked);
   const catalog: Record<number, string> = {
@@ -64,7 +67,7 @@ function makeApiMock({
           tmdb_configured: true,
           gotify_configured: true,
           tmdb_region: "DE",
-          tmdb_language: "de-DE",
+          tmdb_language: tmdbLanguage,
           app_timezone: "Europe/Berlin",
           reminder_time: "09:00",
           gotify_priority: 5,
@@ -108,39 +111,50 @@ function makeApiMock({
   };
 }
 
-test("search, load more, track, stop, and resume", async ({ page }) => {
+test("German status drives the UI language, tracking flow, and attribution", async ({ page }) => {
   await page.clock.setFixedTime(new Date("2026-08-13T10:00:00Z"));
   await page.route("**/api/v1/**", makeApiMock());
   await page.goto("/");
 
+  // Status is de-DE, so the document language and UI switch to German.
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
+
+  // Bilingual attribution: German translation plus the exact English sentence.
+  const footer = page.locator("footer");
+  await expect(footer).toContainText(
+    "Dieses Produkt verwendet die TMDB-API, wird aber nicht von TMDB unterstützt oder zertifiziert.",
+  );
+  await expect(footer).toContainText(
+    "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+  );
+  await expect(footer.getByRole("link", { name: "The Movie Database (TMDB)" })).toBeVisible();
+
   // Search and load a second page.
   await page.getByRole("searchbox").fill("matrix");
   await expect(page.getByRole("heading", { name: "The Matrix" })).toBeVisible();
-  await page.getByRole("button", { name: /load more/i }).click();
+  await page.getByRole("button", { name: /mehr laden/i }).click();
   await expect(page.getByRole("heading", { name: "The Matrix Reloaded" })).toBeVisible();
 
-  const searchSection = page.getByRole("region", { name: "Search" });
+  const searchSection = page.getByRole("region", { name: "Suche" });
   await expect(
     searchSection.getByRole("article").filter({ hasText: "The Matrix" }).first(),
-  ).toContainText("Digital · 10.09.2026 · in 28 days");
+  ).toContainText("Digital · 10.09.2026 · in 28 Tagen");
 
-  // Track the first result from its card.
+  // Track ("Merken") the first result from its card.
   await searchSection
     .getByRole("article")
     .filter({ hasText: "The Matrix" })
     .first()
-    .getByRole("button", { name: /^Track$/ })
+    .getByRole("button", { name: /^Merken$/ })
     .click();
 
-  const trackingSection = page.getByRole("region", { name: "Tracking" });
+  const trackingSection = page.getByRole("region", { name: "Merkliste" });
   await expect(trackingSection.getByRole("heading", { name: "The Matrix" })).toBeVisible();
   const trackedCard = trackingSection
     .getByRole("article")
     .filter({ hasText: "The Matrix" })
     .first();
-  await expect(
-    trackedCard,
-  ).toContainText("Digital · 10.09.2026 · in 28 days");
+  await expect(trackedCard).toContainText("Digital · 10.09.2026 · in 28 Tagen");
 
   // At the default desktop viewport, content stays on the original horizontal rows.
   const desktopPositions = await trackedCard.evaluate((card) => {
@@ -161,20 +175,35 @@ test("search, load more, track, stop, and resume", async ({ page }) => {
   expect(desktopPositions.badgeLeft).toBeGreaterThanOrEqual(desktopPositions.titleRight);
   expect(desktopPositions.buttonLeft).toBeGreaterThanOrEqual(desktopPositions.linkRight);
 
-  // Stop it from the tracking card.
-  await trackingSection.getByRole("button", { name: /^Stop$/ }).click();
+  // Stop ("Entfernen") it from the tracking card.
+  await trackingSection.getByRole("button", { name: /^Entfernen$/ }).click();
   await expect(trackingSection.getByRole("heading", { name: "The Matrix" })).toBeHidden();
 
-  const historySection = page.getByRole("region", { name: "History" });
-  await historySection.getByRole("group").getByText(/show history/i).click();
+  const historySection = page.getByRole("region", { name: "Verlauf" });
+  await historySection.getByRole("group").getByText(/verlauf anzeigen/i).click();
   await expect(historySection.getByRole("heading", { name: "The Matrix" })).toBeVisible();
   await expect(
     historySection.getByRole("article").filter({ hasText: "The Matrix" }).first(),
-  ).toContainText("Digital · 10.09.2026 · in 28 days");
-  await historySection.getByRole("button", { name: /^Resume$/ }).click();
+  ).toContainText("Digital · 10.09.2026 · in 28 Tagen");
+  await historySection.getByRole("button", { name: /^Erneut merken$/ }).click();
 
-  // Back under Tracking.
+  // Back under the Merkliste.
   await expect(trackingSection.getByRole("heading", { name: "The Matrix" })).toBeVisible();
+});
+
+test("an unsupported TMDB language falls back to the English UI", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-08-13T10:00:00Z"));
+  await page.route("**/api/v1/**", makeApiMock({ tmdbLanguage: "fr-FR" }));
+  await page.goto("/");
+
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("region", { name: "Search" })).toBeVisible();
+  await expect(
+    page.getByRole("searchbox", { name: /search movies and tv shows/i }),
+  ).toBeVisible();
+  await expect(page.locator("footer")).toContainText(
+    "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+  );
 });
 
 test("cards stay inside their grid at a 320px phone width", async ({ page }) => {
@@ -197,14 +226,14 @@ test("cards stay inside their grid at a 320px phone width", async ({ page }) => 
   await page.goto("/");
 
   const card = page
-    .getByRole("region", { name: "Tracking" })
+    .getByRole("region", { name: "Merkliste" })
     .getByRole("article")
     .filter({ hasText: "The Matrix Resurrections" })
     .first();
   await expect(card).toBeVisible();
-  await expect(card.getByText("Sync error")).toBeVisible();
-  await expect(card.getByRole("link", { name: /view on tmdb/i })).toBeVisible();
-  await expect(card.getByRole("button", { name: /^Stop$/ })).toBeVisible();
+  await expect(card.getByText("Sync-Fehler")).toBeVisible();
+  await expect(card.getByRole("link", { name: /auf tmdb ansehen/i })).toBeVisible();
+  await expect(card.getByRole("button", { name: /^Entfernen$/ })).toBeVisible();
 
   // The document must not scroll horizontally at any narrow width.
   const overflow = await page.evaluate(() => {
@@ -235,12 +264,12 @@ test("relative day label rolls over across midnight in Europe/Berlin", async ({ 
   await page.clock.fastForward(500); // Fire the 350ms search debounce.
 
   const card = page
-    .getByRole("region", { name: "Search" })
+    .getByRole("region", { name: "Suche" })
     .getByRole("article")
     .filter({ hasText: "The Matrix" })
     .first();
-  await expect(card).toContainText("Digital · 10.09.2026 · in 1 day");
+  await expect(card).toContainText("Digital · 10.09.2026 · in 1 Tag");
 
   await page.clock.fastForward(120_000);
-  await expect(card).toContainText("Digital · 10.09.2026 · today");
+  await expect(card).toContainText("Digital · 10.09.2026 · heute");
 });

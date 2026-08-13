@@ -1,7 +1,8 @@
 import { useState } from "react";
 
 import { useTracked } from "../api/queries";
-import type { RelativeDateContext } from "../lib/format";
+import { useI18n } from "../i18n/context";
+import { formatNumber, type RelativeDateContext } from "../lib/format";
 import { Section } from "./Section";
 import { StateMessage } from "./StateMessage";
 import { TitleCard } from "./TitleCard";
@@ -14,7 +15,6 @@ interface TrackedPanelProps {
   title: string;
   emptyMessage: string;
   collapsible?: boolean;
-  dateLocale?: string;
   relativeDateContext?: RelativeDateContext;
 }
 
@@ -23,9 +23,9 @@ export function TrackedPanel({
   title,
   emptyMessage,
   collapsible = false,
-  dateLocale,
   relativeDateContext,
 }: TrackedPanelProps) {
+  const { t, formatLocale } = useI18n();
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState(!collapsible);
   const query = useTracked(view, offset, LIMIT, open);
@@ -37,14 +37,14 @@ export function TrackedPanel({
 
   const content = (
     <>
-      {query.isPending && <StateMessage tone="muted" title="Loading…" />}
+      {query.isPending && <StateMessage tone="muted" title={t("tracking.loading")} />}
       {query.isError && (
         <StateMessage
           tone="error"
-          title="Could not load titles."
+          title={t("tracking.loadFailed")}
           action={
             <button type="button" onClick={() => void query.refetch()}>
-              Retry
+              {t("actions.retry")}
             </button>
           }
         />
@@ -57,7 +57,6 @@ export function TrackedPanel({
               <TitleCard
                 key={item.id}
                 title={item}
-                dateLocale={dateLocale}
                 relativeDateContext={relativeDateContext}
               />
             ))}
@@ -69,13 +68,17 @@ export function TrackedPanel({
                 disabled={!hasPrev}
                 onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
               >
-                Previous
+                {t("pagination.previous")}
               </button>
               <span className={styles.pageInfo}>
-                {offset + 1}–{Math.min(offset + LIMIT, total)} of {total}
+                {t("pagination.pageInfo", {
+                  from: formatNumber(offset + 1, formatLocale),
+                  to: formatNumber(Math.min(offset + LIMIT, total), formatLocale),
+                  total: formatNumber(total, formatLocale),
+                })}
               </span>
               <button type="button" disabled={!hasNext} onClick={() => setOffset((o) => o + LIMIT)}>
-                Next
+                {t("pagination.next")}
               </button>
             </div>
           )}
@@ -86,12 +89,14 @@ export function TrackedPanel({
 
   if (collapsible) {
     return (
-      <Section title={title} count={open ? total : undefined}>
+      <Section title={title} count={open ? formatNumber(total, formatLocale) : undefined}>
         <details
           className={styles.details}
           onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
         >
-          <summary className={styles.summary}>{open ? "Hide history" : "Show history"}</summary>
+          <summary className={styles.summary}>
+            {open ? t("tracking.hideHistory") : t("tracking.showHistory")}
+          </summary>
           <div className={styles.detailsBody}>{content}</div>
         </details>
       </Section>
@@ -99,7 +104,7 @@ export function TrackedPanel({
   }
 
   return (
-    <Section title={title} count={total}>
+    <Section title={title} count={formatNumber(total, formatLocale)}>
       {content}
     </Section>
   );

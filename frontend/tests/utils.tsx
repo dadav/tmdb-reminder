@@ -3,6 +3,10 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { vi } from "vitest";
 
+import { LocaleProvider } from "../src/i18n/LocaleProvider";
+import { createI18n } from "../src/i18n/instance";
+import type { ResolvedLocale, SupportedLanguage } from "../src/lib/locale";
+
 export interface Route {
   method: string;
   match: (url: URL) => boolean;
@@ -46,12 +50,30 @@ export function pathIs(path: string) {
   return (url: URL) => url.pathname === path;
 }
 
-export function renderWithClient(ui: ReactElement) {
+const LOCALES: Record<SupportedLanguage, ResolvedLocale> = {
+  en: { language: "en", formatLocale: "en-US" },
+  de: { language: "de", formatLocale: "de-DE" },
+};
+
+/** Render inside an isolated locale provider (default German) and a fresh query
+ *  client, so component tests can assert localized visible text. */
+export function renderWithClient(
+  ui: ReactElement,
+  { language = "de" }: { language?: SupportedLanguage } = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  const i18n = createI18n(language);
   return {
     queryClient,
-    ...render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>),
+    i18n,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <LocaleProvider locale={LOCALES[language]} i18n={i18n}>
+          {ui}
+        </LocaleProvider>
+      </QueryClientProvider>,
+    ),
   };
 }

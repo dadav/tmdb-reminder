@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { useStatus } from "./api/queries";
 import styles from "./App.module.css";
 import { Diagnostics } from "./components/Diagnostics";
 import { Footer } from "./components/Footer";
@@ -13,6 +14,9 @@ const SEARCH_DEBOUNCE_MS = 350;
 export function App() {
   const [rawQuery, setRawQuery] = useState("");
   const debouncedQuery = useDebouncedValue(rawQuery, SEARCH_DEBOUNCE_MS);
+  const status = useStatus();
+  // Undefined until status loads; Intl then falls back to the browser locale.
+  const dateLocale = status.data?.config.tmdb_language;
 
   return (
     <div className={styles.app}>
@@ -25,13 +29,23 @@ export function App() {
 
       <main className={styles.main}>
         <SearchBar value={rawQuery} onChange={setRawQuery} />
-        <SearchResults rawQuery={rawQuery} debouncedQuery={debouncedQuery} />
-        <TrackedPanel view="active" title="Tracking" emptyMessage="Nothing tracked yet." />
+        <SearchResults
+          rawQuery={rawQuery}
+          debouncedQuery={debouncedQuery}
+          dateLocale={dateLocale}
+        />
+        <TrackedPanel
+          view="active"
+          title="Tracking"
+          emptyMessage="Nothing tracked yet."
+          dateLocale={dateLocale}
+        />
         <TrackedPanel
           view="history"
           title="History"
           emptyMessage="No stopped or completed titles."
           collapsible
+          dateLocale={dateLocale}
         />
         <Diagnostics />
       </main>

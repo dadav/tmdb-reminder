@@ -7,9 +7,10 @@ import { StateMessage } from "./StateMessage";
 interface SearchResultsProps {
   rawQuery: string;
   debouncedQuery: string;
+  dateLocale?: string;
 }
 
-export function SearchResults({ rawQuery, debouncedQuery }: SearchResultsProps) {
+export function SearchResults({ rawQuery, debouncedQuery, dateLocale }: SearchResultsProps) {
   const search = useSearch(debouncedQuery);
   const trimmed = debouncedQuery.trim();
   const results = search.data?.pages.flatMap((page) => page.results) ?? [];
@@ -64,7 +65,11 @@ export function SearchResults({ rawQuery, debouncedQuery }: SearchResultsProps) 
         <>
           <div className={styles.grid}>
             {results.map((item) => (
-              <ResultCard key={`${item.media_type}-${item.tmdb_id}`} item={item} />
+              <ResultCard
+                key={`${item.media_type}-${item.tmdb_id}`}
+                item={item}
+                dateLocale={dateLocale}
+              />
             ))}
           </div>
           {search.hasNextPage && (

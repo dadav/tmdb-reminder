@@ -13,9 +13,16 @@ interface TrackedPanelProps {
   title: string;
   emptyMessage: string;
   collapsible?: boolean;
+  dateLocale?: string;
 }
 
-export function TrackedPanel({ view, title, emptyMessage, collapsible = false }: TrackedPanelProps) {
+export function TrackedPanel({
+  view,
+  title,
+  emptyMessage,
+  collapsible = false,
+  dateLocale,
+}: TrackedPanelProps) {
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState(!collapsible);
   const query = useTracked(view, offset, LIMIT, open);
@@ -44,7 +51,7 @@ export function TrackedPanel({ view, title, emptyMessage, collapsible = false }:
         <>
           <div className={styles.grid}>
             {items.map((item) => (
-              <TitleCard key={item.id} title={item} />
+              <TitleCard key={item.id} title={item} dateLocale={dateLocale} />
             ))}
           </div>
           {(hasPrev || hasNext) && (

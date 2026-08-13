@@ -33,7 +33,7 @@ function makeApiMock() {
     release_year: 2026,
     tmdb_url: `https://www.themoviedb.org/movie/${id}`,
     tracking_status: tracked.get(id) ?? null,
-    next_release: null,
+    next_release: { kind: "movie_digital", scheduled_date: "2026-09-10" },
   });
 
   const json = (route: Route, body: unknown, status = 200) =>
@@ -51,7 +51,7 @@ function makeApiMock() {
           tmdb_configured: true,
           gotify_configured: true,
           tmdb_region: "DE",
-          tmdb_language: "en-US",
+          tmdb_language: "de-DE",
           app_timezone: "Europe/Berlin",
           reminder_time: "09:00",
           gotify_priority: 5,
@@ -105,8 +105,13 @@ test("search, load more, track, stop, and resume", async ({ page }) => {
   await page.getByRole("button", { name: /load more/i }).click();
   await expect(page.getByRole("heading", { name: "The Matrix Reloaded" })).toBeVisible();
 
-  // Track the first result from its card.
+  // Search cards render the release date in the configured locale (de-DE).
   const searchSection = page.getByRole("region", { name: "Search" });
+  await expect(
+    searchSection.getByRole("article").filter({ hasText: "The Matrix" }).first(),
+  ).toContainText("Digital · 10.09.2026");
+
+  // Track the first result from its card.
   await searchSection
     .getByRole("article")
     .filter({ hasText: "The Matrix" })
@@ -114,9 +119,12 @@ test("search, load more, track, stop, and resume", async ({ page }) => {
     .getByRole("button", { name: /^Track$/ })
     .click();
 
-  // It appears under Tracking (active).
+  // It appears under Tracking (active) with the same localized date.
   const trackingSection = page.getByRole("region", { name: "Tracking" });
   await expect(trackingSection.getByRole("heading", { name: "The Matrix" })).toBeVisible();
+  await expect(
+    trackingSection.getByRole("article").filter({ hasText: "The Matrix" }).first(),
+  ).toContainText("Digital · 10.09.2026");
 
   // Stop it from the tracking card.
   await trackingSection.getByRole("button", { name: /^Stop$/ }).click();

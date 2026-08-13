@@ -4,7 +4,13 @@ import type { Badge } from "./MediaCard";
 import { MediaCard } from "./MediaCard";
 import { TrackToggle } from "./TrackToggle";
 
-export function ResultCard({ item }: { item: SearchResultItem }) {
+export function ResultCard({
+  item,
+  dateLocale,
+}: {
+  item: SearchResultItem;
+  dateLocale?: string;
+}) {
   const badges: Badge[] = item.tracking_status
     ? [{ label: statusLabel(item.tracking_status), tone: item.tracking_status }]
     : [];
@@ -17,7 +23,7 @@ export function ResultCard({ item }: { item: SearchResultItem }) {
       year={item.release_year}
       overview={item.overview}
       tmdbUrl={item.tmdb_url}
-      releaseLabel={nextReleaseLabel(item.next_release)}
+      releaseLabel={nextReleaseLabel(item.next_release, dateLocale)}
       badges={badges}
       actions={
         <TrackToggle

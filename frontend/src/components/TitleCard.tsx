@@ -4,7 +4,7 @@ import type { Badge } from "./MediaCard";
 import { MediaCard } from "./MediaCard";
 import { TrackToggle } from "./TrackToggle";
 
-export function TitleCard({ title }: { title: TitleView }) {
+export function TitleCard({ title, dateLocale }: { title: TitleView; dateLocale?: string }) {
   const badges: Badge[] = [{ label: statusLabel(title.status), tone: title.status }];
   if (title.last_sync_status === "error") {
     badges.push({ label: "Sync error", tone: "warning" });
@@ -18,7 +18,7 @@ export function TitleCard({ title }: { title: TitleView }) {
       year={title.release_year}
       overview={title.overview}
       tmdbUrl={title.tmdb_url}
-      releaseLabel={nextReleaseLabel(title.next_release)}
+      releaseLabel={nextReleaseLabel(title.next_release, dateLocale)}
       badges={badges}
       actions={
         <TrackToggle mediaType={title.media_type} tmdbId={title.tmdb_id} status={title.status} />

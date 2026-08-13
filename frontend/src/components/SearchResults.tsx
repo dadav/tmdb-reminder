@@ -1,4 +1,5 @@
 import { MIN_QUERY_LENGTH, useSearch } from "../api/queries";
+import type { RelativeDateContext } from "../lib/format";
 import { ResultCard } from "./ResultCard";
 import styles from "./SearchResults.module.css";
 import { Section } from "./Section";
@@ -8,9 +9,15 @@ interface SearchResultsProps {
   rawQuery: string;
   debouncedQuery: string;
   dateLocale?: string;
+  relativeDateContext?: RelativeDateContext;
 }
 
-export function SearchResults({ rawQuery, debouncedQuery, dateLocale }: SearchResultsProps) {
+export function SearchResults({
+  rawQuery,
+  debouncedQuery,
+  dateLocale,
+  relativeDateContext,
+}: SearchResultsProps) {
   const search = useSearch(debouncedQuery);
   const trimmed = debouncedQuery.trim();
   const results = search.data?.pages.flatMap((page) => page.results) ?? [];
@@ -69,6 +76,7 @@ export function SearchResults({ rawQuery, debouncedQuery, dateLocale }: SearchRe
                 key={`${item.media_type}-${item.tmdb_id}`}
                 item={item}
                 dateLocale={dateLocale}
+                relativeDateContext={relativeDateContext}
               />
             ))}
           </div>

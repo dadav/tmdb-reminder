@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useTracked } from "../api/queries";
+import type { RelativeDateContext } from "../lib/format";
 import { Section } from "./Section";
 import { StateMessage } from "./StateMessage";
 import { TitleCard } from "./TitleCard";
@@ -14,6 +15,7 @@ interface TrackedPanelProps {
   emptyMessage: string;
   collapsible?: boolean;
   dateLocale?: string;
+  relativeDateContext?: RelativeDateContext;
 }
 
 export function TrackedPanel({
@@ -22,6 +24,7 @@ export function TrackedPanel({
   emptyMessage,
   collapsible = false,
   dateLocale,
+  relativeDateContext,
 }: TrackedPanelProps) {
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState(!collapsible);
@@ -51,7 +54,12 @@ export function TrackedPanel({
         <>
           <div className={styles.grid}>
             {items.map((item) => (
-              <TitleCard key={item.id} title={item} dateLocale={dateLocale} />
+              <TitleCard
+                key={item.id}
+                title={item}
+                dateLocale={dateLocale}
+                relativeDateContext={relativeDateContext}
+              />
             ))}
           </div>
           {(hasPrev || hasNext) && (

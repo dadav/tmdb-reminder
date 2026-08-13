@@ -1,5 +1,5 @@
 import type { SearchResultItem } from "../api/types";
-import { nextReleaseLabel, statusLabel } from "../lib/format";
+import { nextReleaseLabel, statusLabel, type RelativeDateContext } from "../lib/format";
 import type { Badge } from "./MediaCard";
 import { MediaCard } from "./MediaCard";
 import { TrackToggle } from "./TrackToggle";
@@ -7,9 +7,11 @@ import { TrackToggle } from "./TrackToggle";
 export function ResultCard({
   item,
   dateLocale,
+  relativeDateContext,
 }: {
   item: SearchResultItem;
   dateLocale?: string;
+  relativeDateContext?: RelativeDateContext;
 }) {
   const badges: Badge[] = item.tracking_status
     ? [{ label: statusLabel(item.tracking_status), tone: item.tracking_status }]
@@ -23,7 +25,7 @@ export function ResultCard({
       year={item.release_year}
       overview={item.overview}
       tmdbUrl={item.tmdb_url}
-      releaseLabel={nextReleaseLabel(item.next_release, dateLocale)}
+      releaseLabel={nextReleaseLabel(item.next_release, dateLocale, relativeDateContext)}
       badges={badges}
       actions={
         <TrackToggle

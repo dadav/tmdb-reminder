@@ -65,6 +65,15 @@ Compose pulls prebuilt images from GHCR
 published by CI on every push to `main` and every `v*` tag. No local build
 is needed.
 
+To build and run the application images from the current working tree instead:
+
+```bash
+just up-local
+```
+
+This still pulls the PostgreSQL image when needed, but does not pull either
+application image from GHCR.
+
 GHCR packages are private when first created. After the first successful image
 workflow, an owner must open each package on GitHub, select **Package settings**,
 then **Change visibility**, and make both `tmdb-reminder-backend` and

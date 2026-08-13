@@ -96,6 +96,7 @@ function makeApiMock() {
 }
 
 test("search, load more, track, stop, and resume", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-08-13T10:00:00Z"));
   await page.route("**/api/v1/**", makeApiMock());
   await page.goto("/");
 
@@ -105,11 +106,10 @@ test("search, load more, track, stop, and resume", async ({ page }) => {
   await page.getByRole("button", { name: /load more/i }).click();
   await expect(page.getByRole("heading", { name: "The Matrix Reloaded" })).toBeVisible();
 
-  // Search cards render the release date in the configured locale (de-DE).
   const searchSection = page.getByRole("region", { name: "Search" });
   await expect(
     searchSection.getByRole("article").filter({ hasText: "The Matrix" }).first(),
-  ).toContainText("Digital · 10.09.2026");
+  ).toContainText("Digital · 10.09.2026 · in 28 days");
 
   // Track the first result from its card.
   await searchSection
@@ -119,23 +119,43 @@ test("search, load more, track, stop, and resume", async ({ page }) => {
     .getByRole("button", { name: /^Track$/ })
     .click();
 
-  // It appears under Tracking (active) with the same localized date.
   const trackingSection = page.getByRole("region", { name: "Tracking" });
   await expect(trackingSection.getByRole("heading", { name: "The Matrix" })).toBeVisible();
   await expect(
     trackingSection.getByRole("article").filter({ hasText: "The Matrix" }).first(),
-  ).toContainText("Digital · 10.09.2026");
+  ).toContainText("Digital · 10.09.2026 · in 28 days");
 
   // Stop it from the tracking card.
   await trackingSection.getByRole("button", { name: /^Stop$/ }).click();
   await expect(trackingSection.getByRole("heading", { name: "The Matrix" })).toBeHidden();
 
-  // Open history and resume it.
   const historySection = page.getByRole("region", { name: "History" });
   await historySection.getByRole("group").getByText(/show history/i).click();
   await expect(historySection.getByRole("heading", { name: "The Matrix" })).toBeVisible();
+  await expect(
+    historySection.getByRole("article").filter({ hasText: "The Matrix" }).first(),
+  ).toContainText("Digital · 10.09.2026 · in 28 days");
   await historySection.getByRole("button", { name: /^Resume$/ }).click();
 
   // Back under Tracking.
   await expect(trackingSection.getByRole("heading", { name: "The Matrix" })).toBeVisible();
+});
+
+test("relative day label rolls over across midnight in Europe/Berlin", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-09-09T21:59:00Z") });
+  await page.route("**/api/v1/**", makeApiMock());
+  await page.goto("/");
+
+  await page.getByRole("searchbox").fill("matrix");
+  await page.clock.fastForward(500); // Fire the 350ms search debounce.
+
+  const card = page
+    .getByRole("region", { name: "Search" })
+    .getByRole("article")
+    .filter({ hasText: "The Matrix" })
+    .first();
+  await expect(card).toContainText("Digital · 10.09.2026 · in 1 day");
+
+  await page.clock.fastForward(120_000);
+  await expect(card).toContainText("Digital · 10.09.2026 · today");
 });

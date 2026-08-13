@@ -122,6 +122,13 @@ backend-test-full: test-db-up && test-db-down
 up:
     docker compose up -d --pull always
 
+# Build application images from the working tree and start them without pulling.
+up-local:
+    docker compose pull db
+    docker build -t ghcr.io/dadav/tmdb-reminder-backend:local ./backend
+    docker build -t ghcr.io/dadav/tmdb-reminder-web:local ./frontend
+    IMAGE_TAG=local docker compose up -d --pull never
+
 # Stop the stack while preserving PostgreSQL data.
 down:
     docker compose down

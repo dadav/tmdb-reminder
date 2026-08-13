@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -12,6 +12,7 @@ from factories import FakeAdapter, movie_details, tv_details
 from tmdb_reminder.enums import DeliveryStatus, EventState, MediaType, TitleStatus
 from tmdb_reminder.errors import CapacityExceededError, TmdbUnavailableError
 from tmdb_reminder.models import NotificationDelivery, ReleaseEvent, TrackedTitle
+from tmdb_reminder.time_utils import start_of_local_day_utc
 from tmdb_reminder.tracking import repository as repo
 from tmdb_reminder.tracking.service import TrackingService
 
@@ -242,6 +243,121 @@ async def test_metadata_only_refresh_of_stopped_title_creates_no_delivery(sessio
     assert title.status == TitleStatus.STOPPED.value
     assert title.title == "Updated title"
     assert len(await _deliveries(session)) == 1
+    assert (await _deliveries(session))[0].status == DeliveryStatus.CANCELLED.value
+
+
+async def test_track_available_movie_completes_without_delivery(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, available=date(2026, 8, 1))
+    svc = _service(adapter)
+
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    assert title.status == TitleStatus.COMPLETED.value
+    assert title.available_since == date(2026, 8, 1)
+    expected_watch_day = date(2026, 8, 1) + timedelta(days=svc.settings.revision_watch_days + 1)
+    assert title.revision_watch_until == start_of_local_day_utc(svc.tz, expected_watch_day)
+    assert len(await _events(session, "movie:603:digital:DE")) == 0
+    assert len(await _deliveries(session)) == 0
+
+
+async def test_availability_cancels_existing_future_reminder(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, digital=date(2026, 9, 10))
+    svc = _service(adapter)
+    await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+    assert (await _deliveries(session))[0].status == DeliveryStatus.PENDING.value
+
+    # The movie becomes available; availability outranks the pending digital date.
+    adapter.movies[603] = movie_details(603, available=date(2026, 8, 5))
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    await svc.refresh_title(session, title, NOW)
+    await session.commit()
+
+    assert title.status == TitleStatus.COMPLETED.value
+    assert title.available_since == date(2026, 8, 5)
+    events = await _events(session, "movie:603:digital:DE")
+    assert events[0].state == EventState.WITHDRAWN.value
+    assert (await _deliveries(session))[0].status == DeliveryStatus.CANCELLED.value
+
+
+async def test_availability_date_correction_updates_watch(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, available=date(2026, 8, 1))
+    svc = _service(adapter)
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+    first_watch = title.revision_watch_until
+
+    adapter.movies[603] = movie_details(603, available=date(2026, 7, 1))
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    await svc.refresh_title(session, title, NOW)
+    await session.commit()
+
+    assert title.available_since == date(2026, 7, 1)
+    assert title.revision_watch_until is not None
+    assert title.revision_watch_until != first_watch
+
+
+async def test_availability_removal_reopens_with_future_digital(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, available=date(2026, 8, 1))
+    svc = _service(adapter)
+    await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    # Availability disappears but a future digital date appears.
+    adapter.movies[603] = movie_details(603, digital=date(2026, 11, 1))
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    result = await svc.refresh_title(session, title, NOW)
+    await session.commit()
+
+    assert result.created is True
+    assert title.status == TitleStatus.ACTIVE.value
+    assert title.available_since is None
+    assert title.revision_watch_until is None
+    events = await _events(session, "movie:603:digital:DE")
+    assert events[-1].state == EventState.CURRENT.value
+    assert any(d.status == DeliveryStatus.PENDING.value for d in await _deliveries(session))
+
+
+async def test_availability_removal_reopens_unknown(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, available=date(2026, 8, 1))
+    svc = _service(adapter)
+    await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    # Availability disappears with no future digital date: reopen in unknown state.
+    adapter.movies[603] = movie_details(603)
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    await svc.refresh_title(session, title, NOW)
+    await session.commit()
+
+    assert title.status == TitleStatus.ACTIVE.value
+    assert title.available_since is None
+    assert title.revision_watch_until is None
+    assert len(await _deliveries(session)) == 0
+
+
+async def test_stopped_title_metadata_refresh_updates_available_since(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, digital=date(2026, 9, 10))
+    svc = _service(adapter)
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+    await svc.stop(session, MediaType.MOVIE, 603)
+    await session.commit()
+
+    adapter.movies[603] = movie_details(603, available=date(2026, 8, 1))
+    await svc.refresh_title(session, title, NOW, metadata_only=True)
+    await session.commit()
+
+    assert title.status == TitleStatus.STOPPED.value
+    assert title.available_since == date(2026, 8, 1)
+    # No reminder reconciliation for a stopped title: the cancelled delivery stays.
     assert (await _deliveries(session))[0].status == DeliveryStatus.CANCELLED.value
 
 

@@ -47,6 +47,7 @@ export const en = {
     track: "Track",
     stop: "Stop",
     resume: "Resume",
+    remove: "Remove",
     working: "Working…",
     failed: "Action failed. Try again.",
     retry: "Retry",
@@ -71,6 +72,9 @@ export const en = {
     inDays_other: "in {{count}} days",
     daysAgo_one: "{{count}} day ago",
     daysAgo_other: "{{count}} days ago",
+    availableToday: "Available today",
+    availableSince: "Available since {{date}}",
+    availabilityUnknown: "Availability unknown",
   },
   card: {
     viewOnTmdb: "View on TMDB",

@@ -31,6 +31,19 @@ class TitleSnapshot:
 
 
 @dataclass(config=_cfg)
+class MovieRelease:
+    """Region-scoped movie availability derived from TMDB release dates.
+
+    `available_since` is the earliest qualifying digital/physical/TV release at or
+    before today. `next_digital_date` is the earliest future digital date and is
+    only set when the movie is not already available (availability outranks it).
+    """
+
+    available_since: date | None
+    next_digital_date: date | None
+
+
+@dataclass(config=_cfg)
 class ReleaseCandidate:
     """The single "current" release the daily refresh derived for a title.
 

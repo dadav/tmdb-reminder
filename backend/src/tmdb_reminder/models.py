@@ -61,6 +61,10 @@ class TrackedTitle(Base):
 
     status: Mapped[str] = mapped_column(String(16), default=TitleStatus.ACTIVE.value)
 
+    # Region-scoped movie availability (digital/physical/TV release at or before
+    # today). Null for movies not yet available and for all TV titles.
+    available_since: Mapped[date | None] = mapped_column(Date)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now

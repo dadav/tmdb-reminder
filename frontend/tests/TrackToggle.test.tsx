@@ -40,6 +40,23 @@ describe("TrackToggle (German)", () => {
     expect(screen.getByRole("button", { name: "Entfernen" })).toBeInTheDocument();
   });
 
+  it("labels an available completed movie Entfernen and soft-stops it", async () => {
+    const { calls } = installFetch([
+      { method: "DELETE", match: (url) => url.pathname === TRACK_PATH, json: titleView("stopped") },
+    ]);
+    renderWithClient(
+      <TrackToggle mediaType="movie" tmdbId={603} status="completed" availableSince="2026-08-01" />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Entfernen" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+  });
+
+  it("labels a completed movie without availability Erneut merken", () => {
+    installFetch([]);
+    renderWithClient(<TrackToggle mediaType="movie" tmdbId={603} status="completed" />);
+    expect(screen.getByRole("button", { name: "Erneut merken" })).toBeInTheDocument();
+  });
+
   it("issues a PUT when tracking and disables the button while pending", async () => {
     const { calls } = installFetch([
       { method: "PUT", match: (url) => url.pathname === TRACK_PATH, json: titleView("active"), delayMs: 20 },

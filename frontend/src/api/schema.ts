@@ -226,6 +226,8 @@ export interface components {
         };
         /** SearchResultItem */
         SearchResultItem: {
+            /** Available Since */
+            available_since?: string | null;
             media_type: components["schemas"]["MediaType"];
             next_release?: components["schemas"]["NextRelease"] | null;
             /** Original Title */
@@ -285,6 +287,8 @@ export interface components {
         TitleStatus: "active" | "completed" | "stopped";
         /** TitleView */
         TitleView: {
+            /** Available Since */
+            available_since?: string | null;
             /** Id */
             id: number;
             /** Last Sync At */

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from ..enums import EventKind, MediaType, TitleStatus
 from ..models import ReleaseEvent, TrackedTitle
 from ..schemas import NextRelease, TitleView, poster_url
@@ -19,6 +21,22 @@ def build_next_release(event: ReleaseEvent | None) -> NextRelease | None:
     )
 
 
+def build_visible_next_release(
+    title: TrackedTitle, event: ReleaseEvent | None
+) -> NextRelease | None:
+    """Availability replaces an upcoming release only for movies."""
+    if MediaType(title.media_type) == MediaType.MOVIE and title.available_since is not None:
+        return None
+    return build_next_release(event)
+
+
+def build_available_since(title: TrackedTitle) -> date | None:
+    """Expose availability only for movies, even if stored data is inconsistent."""
+    if MediaType(title.media_type) != MediaType.MOVIE:
+        return None
+    return title.available_since
+
+
 def build_title_view(title: TrackedTitle, event: ReleaseEvent | None) -> TitleView:
     media_type = MediaType(title.media_type)
     return TitleView(
@@ -33,7 +51,8 @@ def build_title_view(title: TrackedTitle, event: ReleaseEvent | None) -> TitleVi
         release_year=title.release_year,
         status=TitleStatus(title.status),
         tmdb_url=tmdb_url(media_type, title.tmdb_id),
-        next_release=build_next_release(event),
+        next_release=build_visible_next_release(title, event),
+        available_since=build_available_since(title),
         last_sync_status=title.last_sync_status,
         last_sync_at=title.last_sync_at,
         updated_at=title.updated_at,

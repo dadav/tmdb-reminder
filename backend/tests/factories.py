@@ -12,19 +12,21 @@ def movie_details(
     *,
     title: str = "The Matrix",
     digital: date | None = None,
+    available: date | None = None,
+    available_type: int = 4,
     region: str = "DE",
     release_year: str = "1999-03-31",
 ) -> dict:
-    release_dates: dict = {"results": []}
+    entries: list[dict] = []
     if digital is not None:
-        release_dates["results"].append(
-            {
-                "iso_3166_1": region,
-                "release_dates": [
-                    {"type": 4, "release_date": f"{digital.isoformat()}T00:00:00.000Z"}
-                ],
-            }
+        entries.append({"type": 4, "release_date": f"{digital.isoformat()}T00:00:00.000Z"})
+    if available is not None:
+        entries.append(
+            {"type": available_type, "release_date": f"{available.isoformat()}T00:00:00.000Z"}
         )
+    release_dates: dict = {"results": []}
+    if entries:
+        release_dates["results"].append({"iso_3166_1": region, "release_dates": entries})
     return {
         "id": tmdb_id,
         "title": title,

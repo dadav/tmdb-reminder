@@ -136,6 +136,54 @@ async def test_search_filters_and_maps_tracking(database):
         assert data["results"][1]["tracking_status"] is None
 
 
+async def test_available_movie_surfaces_availability_and_suppresses_next_release(database):
+    async with make_api(database) as (client, adapter, _gotify):
+        adapter.movies[603] = movie_details(603, available=date(2026, 8, 1))
+
+        r = await client.put("/api/v1/tracked-titles/movie/603")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "completed"
+        assert body["available_since"] == "2026-08-01"
+        assert body["next_release"] is None
+
+        # History listing carries the availability date, no next release.
+        hist = await client.get("/api/v1/tracked-titles", params={"view": "history"})
+        item = hist.json()["items"][0]
+        assert item["available_since"] == "2026-08-01"
+        assert item["next_release"] is None
+
+        # Search reflects the tracked availability and suppresses next_release.
+        adapter.search_payload = {
+            "page": 1,
+            "total_pages": 1,
+            "total_results": 1,
+            "results": [
+                {"id": 603, "media_type": "movie", "title": "The Matrix"},
+            ],
+        }
+        s = await client.get("/api/v1/search", params={"query": "matrix"})
+        result = s.json()["results"][0]
+        assert result["available_since"] == "2026-08-01"
+        assert result["next_release"] is None
+
+
+async def test_untracked_and_tv_have_null_available_since(database):
+    async with make_api(database) as (client, adapter, _gotify):
+        adapter.search_payload = {
+            "page": 1,
+            "total_pages": 1,
+            "total_results": 2,
+            "results": [
+                {"id": 603, "media_type": "movie", "title": "The Matrix"},
+                {"id": 1399, "media_type": "tv", "name": "GoT"},
+            ],
+        }
+        r = await client.get("/api/v1/search", params={"query": "matrix"})
+        for item in r.json()["results"]:
+            assert item["available_since"] is None
+
+
 async def test_search_degraded_without_tmdb(database):
     async with make_api(database, tmdb_api_key=None) as (client, _adapter, _gotify):
         r = await client.get("/api/v1/search", params={"query": "matrix"})

@@ -48,6 +48,7 @@ export const de: Resources = {
     track: "Merken",
     stop: "Entfernen",
     resume: "Erneut merken",
+    remove: "Entfernen",
     working: "Läuft…",
     failed: "Aktion fehlgeschlagen. Erneut versuchen.",
     retry: "Erneut versuchen",
@@ -72,6 +73,9 @@ export const de: Resources = {
     inDays_other: "in {{count}} Tagen",
     daysAgo_one: "vor {{count}} Tag",
     daysAgo_other: "vor {{count}} Tagen",
+    availableToday: "Heute verfügbar",
+    availableSince: "Verfügbar seit {{date}}",
+    availabilityUnknown: "Verfügbarkeit unbekannt",
   },
   card: {
     viewOnTmdb: "Auf TMDB ansehen",

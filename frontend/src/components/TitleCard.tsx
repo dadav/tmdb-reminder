@@ -1,6 +1,6 @@
 import type { TitleView } from "../api/types";
 import { useI18n } from "../i18n/context";
-import { nextReleaseLabel, statusLabel, type RelativeDateContext } from "../lib/format";
+import { mediaReleaseLabel, statusLabel, type RelativeDateContext } from "../lib/format";
 import type { Badge } from "./MediaCard";
 import { MediaCard } from "./MediaCard";
 import { TrackToggle } from "./TrackToggle";
@@ -26,10 +26,25 @@ export function TitleCard({
       year={title.release_year}
       overview={title.overview}
       tmdbUrl={title.tmdb_url}
-      releaseLabel={nextReleaseLabel(title.next_release, formatLocale, t, relativeDateContext)}
+      releaseLabel={mediaReleaseLabel(
+        {
+          mediaType: title.media_type,
+          tracked: true,
+          availableSince: title.available_since,
+          nextRelease: title.next_release,
+        },
+        formatLocale,
+        t,
+        relativeDateContext,
+      )}
       badges={badges}
       actions={
-        <TrackToggle mediaType={title.media_type} tmdbId={title.tmdb_id} status={title.status} />
+        <TrackToggle
+          mediaType={title.media_type}
+          tmdbId={title.tmdb_id}
+          status={title.status}
+          availableSince={title.available_since}
+        />
       }
     />
   );

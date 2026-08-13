@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from ..config import Settings
 from ..enums import DeliveryStatus, EventState, MediaType, SyncStatus, TitleStatus
@@ -27,7 +27,7 @@ from ..time_utils import (
 from ..tmdb.adapter import TmdbAdapter
 from ..tmdb.mapping import (
     movie_release_candidate,
-    select_digital_release,
+    select_movie_release,
     snapshot_from_movie,
     snapshot_from_tv,
     tv_release_candidate,
@@ -46,6 +46,13 @@ class ReconcileResult:
     unchanged: bool = False
 
 
+@dataclass(frozen=True)
+class FetchedTitle:
+    snapshot: TitleSnapshot
+    candidate: ReleaseCandidate | None
+    available_since: date | None = None
+
+
 class TrackingService:
     def __init__(self, settings: Settings, adapter: TmdbAdapter) -> None:
         self.settings = settings
@@ -54,21 +61,22 @@ class TrackingService:
 
     # --- TMDB fetch ---
 
-    async def _fetch(
-        self, media_type: MediaType, tmdb_id: int, today
-    ) -> tuple[TitleSnapshot, ReleaseCandidate | None]:
+    async def _fetch(self, media_type: MediaType, tmdb_id: int, today) -> FetchedTitle:
+        """Fetch and normalize the title state used by reconciliation."""
         if media_type == MediaType.MOVIE:
             details = await self.adapter.movie_details(tmdb_id)
             snapshot = snapshot_from_movie(details)
-            digital = select_digital_release(
+            release = select_movie_release(
                 details.get("release_dates", {}), self.settings.tmdb_region, today
             )
-            candidate = movie_release_candidate(tmdb_id, digital, self.settings.tmdb_region)
-            return snapshot, candidate
+            candidate = movie_release_candidate(
+                tmdb_id, release.next_digital_date, self.settings.tmdb_region
+            )
+            return FetchedTitle(snapshot, candidate, release.available_since)
         details = await self.adapter.tv_details(tmdb_id)
         snapshot = snapshot_from_tv(details)
         candidate = tv_release_candidate(tmdb_id, details, today)
-        return snapshot, candidate
+        return FetchedTitle(snapshot, candidate)
 
     # --- Public operations ---
 
@@ -92,7 +100,7 @@ class TrackingService:
                     f"Tracked-title limit reached ({self.settings.max_tracked_titles})"
                 )
 
-        snapshot, candidate = await self._fetch(media_type, tmdb_id, today)
+        fetched = await self._fetch(media_type, tmdb_id, today)
 
         # The upstream fetch intentionally happens before the database lock. This
         # keeps a slow TMDB request from blocking a concurrent idempotent PUT.
@@ -107,11 +115,11 @@ class TrackingService:
             title.status = TitleStatus.ACTIVE.value
             title.revision_watch_until = None
 
-        self._apply_snapshot(title, snapshot, now)
+        self._apply_snapshot(title, fetched.snapshot, now)
         await session.flush()
 
-        result = await self._reconcile(session, title, candidate, now)
-        self._apply_lifecycle_after_refresh(title, result)
+        result = await self._reconcile(session, title, fetched.candidate, now)
+        self._apply_movie_lifecycle(title, fetched.available_since, result, now)
         await session.flush()
         log.info(
             "title tracked",
@@ -150,13 +158,16 @@ class TrackingService:
         """Re-fetch metadata and reconcile the current release. Raises on TMDB failure."""
         today = local_date(self.tz, now)
         media_type = MediaType(title.media_type)
-        snapshot, candidate = await self._fetch(media_type, title.tmdb_id, today)
-        self._apply_snapshot(title, snapshot, now)
+        fetched = await self._fetch(media_type, title.tmdb_id, today)
+        self._apply_snapshot(title, fetched.snapshot, now)
         if metadata_only:
+            # A dormant/stopped title only refreshes cached metadata, including the
+            # availability date, without reconciling reminders or lifecycle.
+            title.available_since = fetched.available_since
             await session.flush()
             return ReconcileResult(unchanged=True)
-        result = await self._reconcile(session, title, candidate, now)
-        self._apply_lifecycle_after_refresh(title, result)
+        result = await self._reconcile(session, title, fetched.candidate, now)
+        self._apply_movie_lifecycle(title, fetched.available_since, result, now)
         await session.flush()
         return result
 
@@ -253,8 +264,40 @@ class TrackingService:
 
     # --- Lifecycle ---
 
-    def _apply_lifecycle_after_refresh(self, title: TrackedTitle, result: ReconcileResult) -> None:
-        # A newly discovered date reopens a completed movie.
+    def _apply_movie_lifecycle(
+        self,
+        title: TrackedTitle,
+        available_since: date | None,
+        result: ReconcileResult,
+        now: datetime,
+    ) -> None:
+        """Fold movie availability into the title lifecycle after reconciliation.
+
+        Availability outranks a later digital release: an available movie carries
+        no reminder (the reconcile withdrew any current digital event) and becomes
+        completed under revision watch. Availability disappearing clears the date
+        and reopens the movie as active. TV titles pass through unchanged.
+        """
+        if MediaType(title.media_type) != MediaType.MOVIE:
+            return
+
+        was_available = title.available_since is not None
+
+        if available_since is not None:
+            # Available now (or availability date corrected): complete and (re)watch.
+            title.available_since = available_since
+            self.complete_movie(title, available_since, now)
+            return
+
+        if was_available:
+            # Availability disappeared: reopen for its future digital reminder (if
+            # the reconcile created one) or an unknown state.
+            title.available_since = None
+            title.status = TitleStatus.ACTIVE.value
+            title.revision_watch_until = None
+            return
+
+        # Never available: a newly discovered date reopens a completed movie.
         if result.created and title.status == TitleStatus.COMPLETED.value:
             title.status = TitleStatus.ACTIVE.value
             title.revision_watch_until = None

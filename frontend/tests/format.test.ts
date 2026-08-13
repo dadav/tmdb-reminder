@@ -4,11 +4,13 @@ import type { NextRelease } from "../src/api/types";
 import type { Translate } from "../src/i18n/context";
 import { createI18n } from "../src/i18n/instance";
 import {
+  availabilityLabel,
   calendarDayDiff,
   formatCalendarDate,
   formatInstant,
   formatNumber,
   formatReminderTime,
+  mediaReleaseLabel,
   nextReleaseLabel,
   relativeDayLabel,
 } from "../src/lib/format";
@@ -79,6 +81,74 @@ describe("nextReleaseLabel", () => {
     const next: NextRelease = { kind: "movie_digital", scheduled_date: "2026-09-10" };
     const context = { now: new Date("2026-08-13T10:00:00Z"), timeZone: "Not/AZone" };
     expect(nextReleaseLabel(next, "de-DE", de, context)).toBe("Digital · 10.09.2026");
+  });
+});
+
+describe("availabilityLabel", () => {
+  const context = { now: new Date("2026-08-13T10:00:00Z"), timeZone: "Europe/Berlin" };
+
+  it("labels the current day as available today (both languages)", () => {
+    expect(availabilityLabel("2026-08-13", "de-DE", de, context)).toBe("Heute verfügbar");
+    expect(availabilityLabel("2026-08-13", "en-US", en, context)).toBe("Available today");
+  });
+
+  it("labels a past date with the localized date and no relative suffix", () => {
+    expect(availabilityLabel("2026-08-01", "de-DE", de, context)).toBe("Verfügbar seit 01.08.2026");
+    expect(availabilityLabel("2026-08-01", "en-US", en, context)).toBe("Available since 08/01/2026");
+  });
+});
+
+describe("mediaReleaseLabel", () => {
+  const context = { now: new Date("2026-08-13T10:00:00Z"), timeZone: "Europe/Berlin" };
+  const movie = (over: Partial<Parameters<typeof mediaReleaseLabel>[0]> = {}) => ({
+    mediaType: "movie" as const,
+    tracked: true,
+    availableSince: null,
+    nextRelease: null,
+    ...over,
+  });
+
+  it("shows availability for an available tracked movie", () => {
+    expect(mediaReleaseLabel(movie({ availableSince: "2026-08-01" }), "en-US", en, context)).toBe(
+      "Available since 08/01/2026",
+    );
+  });
+
+  it("prefers availability over a next release date", () => {
+    const params = movie({
+      availableSince: "2026-08-01",
+      nextRelease: { kind: "movie_digital", scheduled_date: "2026-11-01" },
+    });
+    expect(mediaReleaseLabel(params, "de-DE", de, context)).toBe("Verfügbar seit 01.08.2026");
+  });
+
+  it("shows an unknown placeholder for a tracked movie with no date", () => {
+    expect(mediaReleaseLabel(movie(), "de-DE", de, context)).toBe("Verfügbarkeit unbekannt");
+    expect(mediaReleaseLabel(movie(), "en-US", en, context)).toBe("Availability unknown");
+  });
+
+  it("shows the future digital date for a tracked movie", () => {
+    const params = movie({ nextRelease: { kind: "movie_digital", scheduled_date: "2026-09-10" } });
+    expect(mediaReleaseLabel(params, "en-US", en, context)).toBe(
+      "Digital · 09/10/2026 · in 28 days",
+    );
+  });
+
+  it("keeps the next-release wording for TV", () => {
+    const params = movie({
+      mediaType: "tv",
+      nextRelease: {
+        kind: "tv_episode",
+        scheduled_date: "2026-08-13",
+        season_number: 1,
+        episode_number: 2,
+      },
+    });
+    expect(mediaReleaseLabel(params, "de-DE", de)).toBe("S01E02 · 13.08.2026");
+  });
+
+  it("keeps the untracked-movie placeholder", () => {
+    expect(mediaReleaseLabel(movie({ tracked: false }), "de-DE", de)).toBe("Noch kein Datum");
   });
 });
 

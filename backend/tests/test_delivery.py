@@ -56,13 +56,15 @@ async def test_send_success_records_id_and_completes_movie(session):
 
 async def test_same_day_is_late(session):
     adapter, gotify = FakeAdapter(), FakeGotify()
-    # Release today (NOW's local date) -> late.
-    svc, delivery = await _make_movie_delivery(session, adapter, gotify, release=date(2026, 8, 12))
-    delivery.due_at = NOW - timedelta(hours=1)
-    delivery.expiry_at = NOW + timedelta(hours=6)
+    # Tracked while the digital date is still in the future (a same-day date would
+    # be availability, not a reminder), then delivered on the release day -> late.
+    svc, delivery = await _make_movie_delivery(session, adapter, gotify, release=date(2026, 8, 13))
+    on_release_day = datetime(2026, 8, 13, 10, 0, tzinfo=UTC)
+    delivery.due_at = on_release_day - timedelta(hours=1)
+    delivery.expiry_at = on_release_day + timedelta(hours=6)
     await session.commit()
 
-    await svc.evaluate_due(session, NOW)
+    await svc.evaluate_due(session, on_release_day)
     refreshed = await session.get(NotificationDelivery, delivery.id)
     assert refreshed.status == DeliveryStatus.SENT.value
     assert refreshed.sent_late is True

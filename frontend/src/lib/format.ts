@@ -169,6 +169,47 @@ export function nextReleaseLabel(
   return base;
 }
 
+/** Localized availability label for an already-available movie. `availableSince`
+ *  is a historical (<= today) calendar date, so no relative-day suffix is added.
+ *  Shows "Available today" when the date is the current day in the app timezone. */
+export function availabilityLabel(
+  availableSince: string,
+  formatLocale: string | undefined,
+  t: Translate,
+  context?: RelativeDateContext,
+): string {
+  if (context && calendarDayDiff(availableSince, context) === 0) {
+    return t("release.availableToday");
+  }
+  return t("release.availableSince", { date: formatCalendarDate(availableSince, formatLocale) });
+}
+
+/** Release label for a media card. Tracked movies show availability (or an
+ *  "Availability unknown" placeholder when neither availability nor a future
+ *  digital date is known); TV and untracked results keep the next-release copy. */
+export function mediaReleaseLabel(
+  params: {
+    mediaType: MediaType;
+    tracked: boolean;
+    availableSince: string | null | undefined;
+    nextRelease: NextRelease | null | undefined;
+  },
+  formatLocale: string | undefined,
+  t: Translate,
+  context?: RelativeDateContext,
+): string {
+  const { mediaType, tracked, availableSince, nextRelease } = params;
+  if (mediaType === "movie" && tracked) {
+    if (availableSince) {
+      return availabilityLabel(availableSince, formatLocale, t, context);
+    }
+    if (!nextRelease) {
+      return t("release.availabilityUnknown");
+    }
+  }
+  return nextReleaseLabel(nextRelease, formatLocale, t, context);
+}
+
 /** Format a wall-clock HH:MM time (no timezone conversion) in the given locale.
  *  Returns the raw value unchanged when it is not a valid HH:MM string. */
 export function formatReminderTime(hhmm: string, formatLocale?: string): string {

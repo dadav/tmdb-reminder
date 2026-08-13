@@ -261,6 +261,18 @@
       },
       "SearchResultItem": {
         "properties": {
+          "available_since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available Since"
+          },
           "media_type": {
             "$ref": "#/components/schemas/MediaType"
           },
@@ -438,6 +450,18 @@
       },
       "TitleView": {
         "properties": {
+          "available_since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available Since"
+          },
           "id": {
             "title": "Id",
             "type": "integer"

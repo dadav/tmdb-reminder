@@ -10,10 +10,12 @@ from __future__ import annotations
 from datetime import date
 
 from ..enums import EventKind, MediaType
-from ..value_objects import ReleaseCandidate, TitleSnapshot
+from ..value_objects import MovieRelease, ReleaseCandidate, TitleSnapshot
 
-# TMDB movie release-date "type" codes; 4 == Digital.
+# TMDB movie release-date "type" codes; 4 == Digital, 5 == Physical, 6 == TV.
+# Types 1-3 (premiere/theatrical) never establish availability.
 DIGITAL_RELEASE_TYPE = 4
+AVAILABILITY_RELEASE_TYPES = frozenset({4, 5, 6})
 
 
 def tmdb_url(media_type: MediaType, tmdb_id: int) -> str:
@@ -37,22 +39,36 @@ def _parse_iso_date(value: str | None) -> date | None:
         return None
 
 
-def select_digital_release(release_dates_payload: dict, region: str, today: date) -> date | None:
-    """Earliest type-4 (digital) release in `region` on or after `today`.
+def select_movie_release(release_dates_payload: dict, region: str, today: date) -> MovieRelease:
+    """Region-scoped availability and next-digital date for a movie.
 
     `release_dates_payload` is the body of TMDB `movie/{id}/release_dates`.
+
+    - `available_since`: earliest type 4/5/6 (digital/physical/TV) date in
+      `region` at or before `today`.
+    - `next_digital_date`: earliest type-4 date strictly after `today`, only when
+      the movie is not already available (availability outranks a later digital
+      release).
+
+    Other regions, theatrical types 1-3, and missing/malformed dates are ignored.
     """
-    candidates: list[date] = []
+    available: list[date] = []
+    future_digital: list[date] = []
     for entry in release_dates_payload.get("results", []):
         if entry.get("iso_3166_1") != region:
             continue
         for rel in entry.get("release_dates", []):
-            if rel.get("type") != DIGITAL_RELEASE_TYPE:
-                continue
+            rel_type = rel.get("type")
             parsed = _parse_iso_date(rel.get("release_date"))
-            if parsed is not None and parsed >= today:
-                candidates.append(parsed)
-    return min(candidates) if candidates else None
+            if parsed is None:
+                continue
+            if rel_type in AVAILABILITY_RELEASE_TYPES and parsed <= today:
+                available.append(parsed)
+            if rel_type == DIGITAL_RELEASE_TYPE and parsed > today:
+                future_digital.append(parsed)
+    available_since = min(available) if available else None
+    next_digital_date = min(future_digital) if future_digital and available_since is None else None
+    return MovieRelease(available_since=available_since, next_digital_date=next_digital_date)
 
 
 def snapshot_from_movie(details: dict) -> TitleSnapshot:

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from tmdb_reminder.enums import EventKind, MediaType
 from tmdb_reminder.tmdb.mapping import (
     movie_release_candidate,
-    select_digital_release,
+    select_movie_release,
     snapshot_from_movie,
     snapshot_from_tv,
     tmdb_url,
@@ -26,7 +28,7 @@ def _release_dates(region_entries: dict) -> dict:
     }
 
 
-def test_digital_selects_type4_in_region():
+def test_future_digital_selected_in_region():
     payload = _release_dates(
         {
             "DE": [
@@ -36,40 +38,102 @@ def test_digital_selects_type4_in_region():
             "US": [{"type": 4, "release_date": "2026-08-15T00:00:00.000Z"}],
         }
     )
-    assert select_digital_release(payload, "DE", TODAY) == date(2026, 9, 10)
+    rel = select_movie_release(payload, "DE", TODAY)
+    assert rel.available_since is None
+    assert rel.next_digital_date == date(2026, 9, 10)
 
 
-def test_digital_picks_earliest_on_or_after_today():
+def test_next_digital_picks_earliest_future():
     payload = _release_dates(
         {
             "DE": [
-                {"type": 4, "release_date": "2026-07-01"},  # past -> ignored
                 {"type": 4, "release_date": "2026-12-01"},
                 {"type": 4, "release_date": "2026-09-05"},
             ]
         }
     )
-    assert select_digital_release(payload, "DE", TODAY) == date(2026, 9, 5)
+    rel = select_movie_release(payload, "DE", TODAY)
+    assert rel.available_since is None
+    assert rel.next_digital_date == date(2026, 9, 5)
 
 
-def test_digital_includes_today():
+@pytest.mark.parametrize("release_type", [4, 5, 6])
+def test_available_when_qualifying_type_at_or_before_today(release_type):
+    payload = _release_dates({"DE": [{"type": release_type, "release_date": "2026-07-01"}]})
+    rel = select_movie_release(payload, "DE", TODAY)
+    assert rel.available_since == date(2026, 7, 1)
+    assert rel.next_digital_date is None
+
+
+def test_digital_today_is_availability_not_reminder():
     payload = _release_dates({"DE": [{"type": 4, "release_date": "2026-08-12"}]})
-    assert select_digital_release(payload, "DE", TODAY) == TODAY
+    rel = select_movie_release(payload, "DE", TODAY)
+    assert rel.available_since == TODAY
+    assert rel.next_digital_date is None
 
 
-def test_digital_none_when_only_past_or_other_region():
+def test_availability_picks_earliest_past_qualifying_date():
     payload = _release_dates(
         {
-            "DE": [{"type": 4, "release_date": "2020-01-01"}],
-            "US": [{"type": 4, "release_date": "2027-01-01"}],
+            "DE": [
+                {"type": 5, "release_date": "2026-06-01"},  # physical
+                {"type": 4, "release_date": "2026-05-01"},  # earlier digital
+                {"type": 6, "release_date": "2026-07-01"},  # tv
+            ]
         }
     )
-    assert select_digital_release(payload, "DE", TODAY) is None
+    assert select_movie_release(payload, "DE", TODAY).available_since == date(2026, 5, 1)
 
 
-def test_digital_none_when_no_digital_type():
+def test_availability_outranks_future_digital():
+    payload = _release_dates(
+        {
+            "DE": [
+                {"type": 4, "release_date": "2026-05-01"},  # already available
+                {"type": 4, "release_date": "2027-01-01"},  # later digital ignored
+            ]
+        }
+    )
+    rel = select_movie_release(payload, "DE", TODAY)
+    assert rel.available_since == date(2026, 5, 1)
+    assert rel.next_digital_date is None
+
+
+def test_release_ignores_theatrical_types_for_availability():
+    payload = _release_dates(
+        {
+            "DE": [
+                {"type": 1, "release_date": "2026-01-01"},  # premiere
+                {"type": 2, "release_date": "2026-02-01"},  # theatrical limited
+                {"type": 3, "release_date": "2026-03-01"},  # theatrical
+            ]
+        }
+    )
+    rel = select_movie_release(payload, "DE", TODAY)
+    assert rel.available_since is None
+    assert rel.next_digital_date is None
+
+
+def test_release_ignores_other_regions_and_malformed_dates():
+    payload = _release_dates(
+        {
+            "DE": [
+                {"type": 4, "release_date": "not-a-date"},
+                {"type": 5, "release_date": None},
+            ],
+            "US": [{"type": 4, "release_date": "2026-05-01"}],
+        }
+    )
+    rel = select_movie_release(payload, "DE", TODAY)
+    assert rel.available_since is None
+    assert rel.next_digital_date is None
+
+
+def test_release_empty_when_no_qualifying_entries():
     payload = _release_dates({"DE": [{"type": 3, "release_date": "2027-01-01"}]})
-    assert select_digital_release(payload, "DE", TODAY) is None
+    rel = select_movie_release(payload, "DE", TODAY)
+    assert rel.available_since is None
+    assert rel.next_digital_date is None
 
 
 def test_movie_candidate_key_and_kind():

@@ -1,6 +1,6 @@
 import type { SearchResultItem } from "../api/types";
 import { useI18n } from "../i18n/context";
-import { nextReleaseLabel, statusLabel, type RelativeDateContext } from "../lib/format";
+import { mediaReleaseLabel, statusLabel, type RelativeDateContext } from "../lib/format";
 import type { Badge } from "./MediaCard";
 import { MediaCard } from "./MediaCard";
 import { TrackToggle } from "./TrackToggle";
@@ -25,13 +25,24 @@ export function ResultCard({
       year={item.release_year}
       overview={item.overview}
       tmdbUrl={item.tmdb_url}
-      releaseLabel={nextReleaseLabel(item.next_release, formatLocale, t, relativeDateContext)}
+      releaseLabel={mediaReleaseLabel(
+        {
+          mediaType: item.media_type,
+          tracked: item.tracking_status != null,
+          availableSince: item.available_since,
+          nextRelease: item.next_release,
+        },
+        formatLocale,
+        t,
+        relativeDateContext,
+      )}
       badges={badges}
       actions={
         <TrackToggle
           mediaType={item.media_type}
           tmdbId={item.tmdb_id}
           status={item.tracking_status ?? null}
+          availableSince={item.available_since}
         />
       }
     />

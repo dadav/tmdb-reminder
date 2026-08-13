@@ -6,6 +6,9 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  /* Grid item default min-width:auto keeps the card at its content minimum and
+     overflows narrow phone tracks; min-width:0 lets it shrink to the grid track. */
+  min-width: 0;
 }
 
 .body {
@@ -21,11 +24,16 @@
   justify-content: space-between;
   gap: 0.5rem;
   align-items: flex-start;
+  /* Badges drop below the title when they cannot fit beside it. */
+  flex-wrap: wrap;
 }
 
 .title {
   margin: 0;
   font-size: 1.05rem;
+  min-width: 0;
+  /* Only unusually long, unbreakable titles break mid-word; normal titles wrap on spaces. */
+  overflow-wrap: break-word;
 }
 
 .badges {
@@ -87,6 +95,8 @@
   gap: 0.75rem;
   margin-top: auto;
   padding-top: 0.3rem;
+  /* Action buttons wrap under the TMDB link instead of pushing the card wider. */
+  flex-wrap: wrap;
 }
 
 .link {

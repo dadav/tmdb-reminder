@@ -4,8 +4,23 @@ import { expect, test, type Route } from "@playwright/test";
 // tracked/history lists all derive from it, so the UI behaves like the real app.
 type TrackState = "active" | "stopped" | "completed";
 
-function makeApiMock() {
-  const tracked = new Map<number, TrackState>();
+interface ApiMockOptions {
+  initialTracked?: Iterable<readonly [number, TrackState]>;
+  catalog?: Record<number, string>;
+  syncErrorIds?: ReadonlySet<number>;
+}
+
+function makeApiMock({
+  initialTracked = [],
+  catalog: catalogOverrides = {},
+  syncErrorIds = new Set<number>(),
+}: ApiMockOptions = {}) {
+  const tracked = new Map<number, TrackState>(initialTracked);
+  const catalog: Record<number, string> = {
+    603: "The Matrix",
+    604: "The Matrix Reloaded",
+    ...catalogOverrides,
+  };
 
   const titleView = (id: number, title: string, status: TrackState) => ({
     id,
@@ -18,11 +33,9 @@ function makeApiMock() {
     status,
     tmdb_url: `https://www.themoviedb.org/movie/${id}`,
     next_release: { kind: "movie_digital", scheduled_date: "2026-09-10" },
-    last_sync_status: "ok",
+    last_sync_status: syncErrorIds.has(id) ? "error" : "ok",
     updated_at: "2026-08-12T00:00:00Z",
   });
-
-  const catalog: Record<number, string> = { 603: "The Matrix", 604: "The Matrix Reloaded" };
 
   const searchItem = (id: number) => ({
     media_type: "movie",
@@ -121,9 +134,32 @@ test("search, load more, track, stop, and resume", async ({ page }) => {
 
   const trackingSection = page.getByRole("region", { name: "Tracking" });
   await expect(trackingSection.getByRole("heading", { name: "The Matrix" })).toBeVisible();
+  const trackedCard = trackingSection
+    .getByRole("article")
+    .filter({ hasText: "The Matrix" })
+    .first();
   await expect(
-    trackingSection.getByRole("article").filter({ hasText: "The Matrix" }).first(),
+    trackedCard,
   ).toContainText("Digital · 10.09.2026 · in 28 days");
+
+  // At the default desktop viewport, content stays on the original horizontal rows.
+  const desktopPositions = await trackedCard.evaluate((card) => {
+    const title = card.querySelector("h3");
+    const badge = card.querySelector('[data-tone="active"]');
+    const link = card.querySelector("a");
+    const button = card.querySelector("button");
+    if (!title || !badge || !link || !button) {
+      throw new Error("Expected title, active badge, TMDB link, and action button");
+    }
+    return {
+      titleRight: title.getBoundingClientRect().right,
+      badgeLeft: badge.getBoundingClientRect().left,
+      linkRight: link.getBoundingClientRect().right,
+      buttonLeft: button.getBoundingClientRect().left,
+    };
+  });
+  expect(desktopPositions.badgeLeft).toBeGreaterThanOrEqual(desktopPositions.titleRight);
+  expect(desktopPositions.buttonLeft).toBeGreaterThanOrEqual(desktopPositions.linkRight);
 
   // Stop it from the tracking card.
   await trackingSection.getByRole("button", { name: /^Stop$/ }).click();
@@ -139,6 +175,55 @@ test("search, load more, track, stop, and resume", async ({ page }) => {
 
   // Back under Tracking.
   await expect(trackingSection.getByRole("heading", { name: "The Matrix" })).toBeVisible();
+});
+
+test("cards stay inside their grid at a 320px phone width", async ({ page }) => {
+  // Worst case for horizontal overflow: a narrow phone, a long title with an
+  // unbreakable word, two badges (status + sync error), the TMDB link, and an
+  // action button all competing for the same row.
+  const longTitle =
+    "The Matrix Resurrections Ultimate Pneumonoultramicroscopicsilicovolcanoconiosis Edition";
+
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.clock.setFixedTime(new Date("2026-08-13T10:00:00Z"));
+  await page.route(
+    "**/api/v1/**",
+    makeApiMock({
+      initialTracked: [[42, "active"]],
+      catalog: { 42: longTitle },
+      syncErrorIds: new Set([42]),
+    }),
+  );
+  await page.goto("/");
+
+  const card = page
+    .getByRole("region", { name: "Tracking" })
+    .getByRole("article")
+    .filter({ hasText: "The Matrix Resurrections" })
+    .first();
+  await expect(card).toBeVisible();
+  await expect(card.getByText("Sync error")).toBeVisible();
+  await expect(card.getByRole("link", { name: /view on tmdb/i })).toBeVisible();
+  await expect(card.getByRole("button", { name: /^Stop$/ })).toBeVisible();
+
+  // The document must not scroll horizontally at any narrow width.
+  const overflow = await page.evaluate(() => {
+    const el = document.scrollingElement ?? document.documentElement;
+    return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
+  });
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+
+  // Every card must fit within its grid container's right edge.
+  const rightOverflow = await page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll("article"));
+    return cards.map((cardEl) => {
+      const gridRight = (cardEl.parentElement as HTMLElement).getBoundingClientRect().right;
+      return cardEl.getBoundingClientRect().right - gridRight;
+    });
+  });
+  for (const delta of rightOverflow) {
+    expect(delta).toBeLessThanOrEqual(0.5);
+  }
 });
 
 test("relative day label rolls over across midnight in Europe/Berlin", async ({ page }) => {

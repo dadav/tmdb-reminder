@@ -41,6 +41,14 @@ Worker (APScheduler) ────────────────┼─▶ P
 - **Movies**: the earliest type-4 (digital) release on/after today in your region.
   After delivery or expiry a movie is *completed* but stays under daily
   revision-watch for 30 days, and reopens if a new date appears.
+- **Availability precedence**: release dates are authoritative. A type 4/5/6
+  release at or before today marks a movie *available now* with a date and no
+  reminder. When release dates give neither a past nor a future digital date, the
+  app falls back to TMDB watch providers: a non-empty offering in your region marks
+  the movie *available now* without a date and without a reminder. Provider
+  availability is *sticky* - a later provider disappearance or future digital date
+  never reopens tracking, but a later past release date upgrades it to a dated
+  availability.
 - **TV**: uses `next_episode_to_air`; identity is series id + season + episode.
   TV stays active across seasons and hiatuses until you stop it.
 - A changed date creates a new event **revision**; unsent prior reminders are
@@ -154,3 +162,8 @@ regenerates both and fails on any diff.
 
 This product uses the TMDB API but is not endorsed or certified by TMDB. TMDB
 branding and the required notice appear in the app footer.
+
+Watch-provider availability data is provided by JustWatch (via TMDB). TMDB
+requires attribution to JustWatch when using watch-provider data, so a JustWatch
+notice appears beside the TMDB attribution in the app footer. See
+<https://developer.themoviedb.org/reference/movie-watch-providers>.

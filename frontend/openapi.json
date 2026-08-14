@@ -273,6 +273,11 @@
             ],
             "title": "Available Since"
           },
+          "is_available": {
+            "default": false,
+            "title": "Is Available",
+            "type": "boolean"
+          },
           "media_type": {
             "$ref": "#/components/schemas/MediaType"
           },
@@ -465,6 +470,11 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "is_available": {
+            "default": false,
+            "title": "Is Available",
+            "type": "boolean"
           },
           "last_sync_at": {
             "anyOf": [

@@ -228,6 +228,11 @@ export interface components {
         SearchResultItem: {
             /** Available Since */
             available_since?: string | null;
+            /**
+             * Is Available
+             * @default false
+             */
+            is_available: boolean;
             media_type: components["schemas"]["MediaType"];
             next_release?: components["schemas"]["NextRelease"] | null;
             /** Original Title */
@@ -291,6 +296,11 @@ export interface components {
             available_since?: string | null;
             /** Id */
             id: number;
+            /**
+             * Is Available
+             * @default false
+             */
+            is_available: boolean;
             /** Last Sync At */
             last_sync_at?: string | null;
             /** Last Sync Status */

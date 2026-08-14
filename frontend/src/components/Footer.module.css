@@ -24,3 +24,8 @@
   font-size: 0.8rem;
   max-width: 40ch;
 }
+
+.providerLink {
+  color: inherit;
+  text-decoration: underline;
+}

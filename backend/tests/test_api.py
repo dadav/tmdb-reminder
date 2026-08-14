@@ -16,7 +16,7 @@ from asgi_lifespan import LifespanManager
 from sqlalchemy import text
 
 from conftest import integration, make_settings
-from factories import FakeAdapter, FakeGotify, movie_details
+from factories import FakeAdapter, FakeGotify, movie_details, movie_providers
 from tmdb_reminder.api.app import create_app
 from tmdb_reminder.tracking.service import TrackingService
 
@@ -144,12 +144,14 @@ async def test_available_movie_surfaces_availability_and_suppresses_next_release
         assert r.status_code == 200
         body = r.json()
         assert body["status"] == "completed"
+        assert body["is_available"] is True
         assert body["available_since"] == "2026-08-01"
         assert body["next_release"] is None
 
         # History listing carries the availability date, no next release.
         hist = await client.get("/api/v1/tracked-titles", params={"view": "history"})
         item = hist.json()["items"][0]
+        assert item["is_available"] is True
         assert item["available_since"] == "2026-08-01"
         assert item["next_release"] is None
 
@@ -164,11 +166,45 @@ async def test_available_movie_surfaces_availability_and_suppresses_next_release
         }
         s = await client.get("/api/v1/search", params={"query": "matrix"})
         result = s.json()["results"][0]
+        assert result["is_available"] is True
         assert result["available_since"] == "2026-08-01"
         assert result["next_release"] is None
 
 
-async def test_untracked_and_tv_have_null_available_since(database):
+async def test_provider_available_movie_is_available_without_date(database):
+    async with make_api(database) as (client, adapter, _gotify):
+        # No release dates; watch providers establish undated availability.
+        adapter.movies[603] = movie_details(603)
+        adapter.providers[603] = movie_providers()
+
+        r = await client.put("/api/v1/tracked-titles/movie/603")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "completed"
+        assert body["is_available"] is True
+        assert body["available_since"] is None
+        assert body["next_release"] is None
+
+        hist = await client.get("/api/v1/tracked-titles", params={"view": "history"})
+        item = hist.json()["items"][0]
+        assert item["is_available"] is True
+        assert item["available_since"] is None
+
+
+async def test_unknown_availability_movie_not_available(database):
+    async with make_api(database) as (client, adapter, _gotify):
+        # No dates and no providers: availability unknown, still active.
+        adapter.movies[603] = movie_details(603)
+
+        r = await client.put("/api/v1/tracked-titles/movie/603")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "active"
+        assert body["is_available"] is False
+        assert body["available_since"] is None
+
+
+async def test_untracked_and_tv_have_null_availability(database):
     async with make_api(database) as (client, adapter, _gotify):
         adapter.search_payload = {
             "page": 1,
@@ -181,6 +217,7 @@ async def test_untracked_and_tv_have_null_available_since(database):
         }
         r = await client.get("/api/v1/search", params={"query": "matrix"})
         for item in r.json()["results"]:
+            assert item["is_available"] is False
             assert item["available_since"] is None
 
 

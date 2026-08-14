@@ -161,6 +161,19 @@ class TmdbAdapter:
 
         return await self._run(lambda: self._call_with_retries(_do, op="movie_details"))
 
+    async def movie_watch_providers(self, tmdb_id: int) -> dict[str, Any]:
+        """Region-keyed watch providers for a movie (one upstream call).
+
+        The body is TMDB `movie/{id}/watch/providers`; provider listings are not
+        language-scoped, so no language is sent.
+        """
+        self._require_configured()
+
+        def _do() -> dict[str, Any]:
+            return tmdb.Movies(tmdb_id).watch_providers()
+
+        return await self._run(lambda: self._call_with_retries(_do, op="movie_watch_providers"))
+
     async def tv_details(self, tmdb_id: int) -> dict[str, Any]:
         """TV info; the base payload already carries `next_episode_to_air`."""
         self._require_configured()

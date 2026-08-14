@@ -40,7 +40,10 @@ class SearchResultItem(BaseModel):
     tmdb_url: str
     tracking_status: TitleStatus | None = None
     next_release: NextRelease | None = None
-    # Region-scoped movie availability. Set only for tracked movie matches.
+    # Whether a tracked movie is available now (dated or undated). False for TV and
+    # untracked matches.
+    is_available: bool = False
+    # Region-scoped movie availability date. Null for undated (provider) availability.
     available_since: date | None = None
 
 
@@ -65,7 +68,10 @@ class TitleView(BaseModel):
     status: TitleStatus
     tmdb_url: str
     next_release: NextRelease | None = None
-    # Region-scoped movie availability; null for TV and unavailable movies.
+    # Whether the movie is available now (dated or undated). False for TV.
+    is_available: bool = False
+    # Region-scoped movie availability date; null for TV, unavailable movies, and
+    # undated (provider) availability.
     available_since: date | None = None
     last_sync_status: str | None = None
     last_sync_at: datetime | None = None

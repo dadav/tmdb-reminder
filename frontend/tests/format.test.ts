@@ -103,19 +103,26 @@ describe("mediaReleaseLabel", () => {
   const movie = (over: Partial<Parameters<typeof mediaReleaseLabel>[0]> = {}) => ({
     mediaType: "movie" as const,
     tracked: true,
+    isAvailable: false,
     availableSince: null,
     nextRelease: null,
     ...over,
   });
 
   it("shows availability for an available tracked movie", () => {
-    expect(mediaReleaseLabel(movie({ availableSince: "2026-08-01" }), "en-US", en, context)).toBe(
-      "Available since 08/01/2026",
-    );
+    const params = movie({ isAvailable: true, availableSince: "2026-08-01" });
+    expect(mediaReleaseLabel(params, "en-US", en, context)).toBe("Available since 08/01/2026");
+  });
+
+  it("shows 'Available now' for undated (provider) availability", () => {
+    const params = movie({ isAvailable: true, availableSince: null });
+    expect(mediaReleaseLabel(params, "en-US", en, context)).toBe("Available now");
+    expect(mediaReleaseLabel(params, "de-DE", de, context)).toBe("Jetzt verfügbar");
   });
 
   it("prefers availability over a next release date", () => {
     const params = movie({
+      isAvailable: true,
       availableSince: "2026-08-01",
       nextRelease: { kind: "movie_digital", scheduled_date: "2026-11-01" },
     });

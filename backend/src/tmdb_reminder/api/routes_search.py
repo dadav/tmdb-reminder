@@ -9,7 +9,7 @@ from ..schemas import NextRelease, SearchResponse, SearchResultItem, poster_url
 from ..tmdb.mapping import tmdb_url
 from ..tracking import repository as repo
 from .deps import AdapterDep, SessionDep, SettingsDep
-from .views import build_available_since, build_visible_next_release
+from .views import build_available_since, build_is_available, build_visible_next_release
 
 router = APIRouter(tags=["search"])
 
@@ -50,10 +50,12 @@ async def search(
 
         tracking_status: TitleStatus | None = None
         next_release: NextRelease | None = None
+        is_available = False
         available_since = None
         tracked_title = tracked.get((media_type.value, tmdb_id))
         if tracked_title is not None:
             tracking_status = TitleStatus(tracked_title.status)
+            is_available = build_is_available(tracked_title)
             available_since = build_available_since(tracked_title)
             next_release = build_visible_next_release(tracked_title, events.get(tracked_title.id))
 
@@ -70,6 +72,7 @@ async def search(
                 tmdb_url=tmdb_url(media_type, tmdb_id),
                 tracking_status=tracking_status,
                 next_release=next_release,
+                is_available=is_available,
                 available_since=available_since,
             )
         )

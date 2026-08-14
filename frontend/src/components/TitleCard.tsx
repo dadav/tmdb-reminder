@@ -30,6 +30,7 @@ export function TitleCard({
         {
           mediaType: title.media_type,
           tracked: true,
+          isAvailable: title.is_available,
           availableSince: title.available_since,
           nextRelease: title.next_release,
         },
@@ -43,7 +44,7 @@ export function TitleCard({
           mediaType={title.media_type}
           tmdbId={title.tmdb_id}
           status={title.status}
-          availableSince={title.available_since}
+          isAvailable={title.is_available}
         />
       }
     />

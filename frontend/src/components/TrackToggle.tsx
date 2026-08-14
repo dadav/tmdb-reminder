@@ -7,19 +7,19 @@ interface TrackToggleProps {
   mediaType: MediaType;
   tmdbId: number;
   status: TitleStatus | null;
-  availableSince?: string | null;
+  isAvailable?: boolean;
 }
 
 /** One button that tracks, stops, resumes, or removes a title. Both mutations
  *  disable the button while in flight so conflicting actions cannot overlap.
  *  An available completed movie offers "Remove" (the same soft-stop as "Stop"). */
-export function TrackToggle({ mediaType, tmdbId, status, availableSince }: TrackToggleProps) {
+export function TrackToggle({ mediaType, tmdbId, status, isAvailable }: TrackToggleProps) {
   const { t } = useI18n();
   const track = useTrackTitle();
   const stop = useStopTitle();
   const busy = track.isPending || stop.isPending;
   const isActive = status === "active";
-  const isAvailableCompleted = status === "completed" && availableSince != null;
+  const isAvailableCompleted = status === "completed" && isAvailable === true;
   // Both branches soft-stop the title; only the button copy differs.
   const removes = isActive || isAvailableCompleted;
 

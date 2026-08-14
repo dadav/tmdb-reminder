@@ -29,6 +29,7 @@ export function ResultCard({
         {
           mediaType: item.media_type,
           tracked: item.tracking_status != null,
+          isAvailable: item.is_available,
           availableSince: item.available_since,
           nextRelease: item.next_release,
         },
@@ -42,7 +43,7 @@ export function ResultCard({
           mediaType={item.media_type}
           tmdbId={item.tmdb_id}
           status={item.tracking_status ?? null}
-          availableSince={item.available_since}
+          isAvailable={item.is_available}
         />
       }
     />

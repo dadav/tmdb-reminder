@@ -8,8 +8,14 @@ import pytest
 from sqlalchemy import select
 
 from conftest import integration, make_settings
-from factories import FakeAdapter, movie_details, tv_details
-from tmdb_reminder.enums import DeliveryStatus, EventState, MediaType, TitleStatus
+from factories import FakeAdapter, movie_details, movie_providers, tv_details
+from tmdb_reminder.enums import (
+    AvailabilitySource,
+    DeliveryStatus,
+    EventState,
+    MediaType,
+    TitleStatus,
+)
 from tmdb_reminder.errors import CapacityExceededError, TmdbUnavailableError
 from tmdb_reminder.models import NotificationDelivery, ReleaseEvent, TrackedTitle
 from tmdb_reminder.time_utils import start_of_local_day_utc
@@ -359,6 +365,231 @@ async def test_stopped_title_metadata_refresh_updates_available_since(session):
     assert title.available_since == date(2026, 8, 1)
     # No reminder reconciliation for a stopped title: the cancelled delivery stays.
     assert (await _deliveries(session))[0].status == DeliveryStatus.CANCELLED.value
+
+
+async def test_provider_request_skipped_when_release_has_future_date(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, digital=date(2026, 9, 10))
+    adapter.providers[603] = movie_providers()
+    svc = _service(adapter)
+
+    await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    assert adapter.watch_provider_calls == []
+
+
+async def test_provider_request_skipped_when_release_available(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, available=date(2026, 8, 1))
+    adapter.providers[603] = movie_providers()
+    svc = _service(adapter)
+
+    await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    assert adapter.watch_provider_calls == []
+
+
+async def test_provider_availability_completes_without_date_event_or_delivery(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603)  # no dates at all
+    adapter.providers[603] = movie_providers(offering="flatrate")
+    svc = _service(adapter)
+
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    assert adapter.watch_provider_calls == [603]
+    assert title.status == TitleStatus.COMPLETED.value
+    assert title.available_since is None
+    assert title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+    assert title.revision_watch_until is not None
+    assert len(await _events(session, "movie:603:digital:DE")) == 0
+    assert len(await _deliveries(session)) == 0
+
+
+async def test_provider_unavailable_leaves_unknown_state(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603)
+    adapter.providers[603] = movie_providers(link_only=True)  # link only, not available
+    svc = _service(adapter)
+
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    assert adapter.watch_provider_calls == [603]
+    assert title.status == TitleStatus.ACTIVE.value
+    assert title.availability_source is None
+    assert title.available_since is None
+    assert len(await _deliveries(session)) == 0
+
+
+async def test_provider_failure_creates_no_record(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603)  # no dates -> provider fallback consulted
+    adapter.provider_fail_ids.add(603)
+    svc = _service(adapter)
+
+    with pytest.raises(TmdbUnavailableError):
+        await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.rollback()
+
+    titles = (await session.execute(select(TrackedTitle))).scalars().all()
+    assert len(titles) == 0
+
+
+async def test_provider_failure_preserves_existing_state(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, digital=date(2026, 9, 10))
+    svc = _service(adapter)
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+    assert (await _deliveries(session))[0].status == DeliveryStatus.PENDING.value
+
+    # Date disappears and providers fail: the refresh raises and leaves prior state.
+    adapter.movies[603] = movie_details(603)
+    adapter.provider_fail_ids.add(603)
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    with pytest.raises(TmdbUnavailableError):
+        await svc.refresh_title(session, title, NOW)
+    await session.rollback()
+
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    assert title.status == TitleStatus.ACTIVE.value
+    events = await _events(session, "movie:603:digital:DE")
+    assert events[0].state == EventState.CURRENT.value
+    assert (await _deliveries(session))[0].status == DeliveryStatus.PENDING.value
+
+
+async def test_provider_availability_sticky_after_disappearance(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603)
+    adapter.providers[603] = movie_providers()
+    svc = _service(adapter)
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+    watch = title.revision_watch_until
+
+    # Providers disappear, still no dates: availability stays sticky.
+    adapter.providers[603] = movie_providers(link_only=True)
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    await svc.refresh_title(session, title, NOW)
+    await session.commit()
+
+    assert title.status == TitleStatus.COMPLETED.value
+    assert title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+    assert title.revision_watch_until == watch  # window not reset
+
+
+async def test_provider_availability_sticky_against_future_digital(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603)
+    adapter.providers[603] = movie_providers()
+    svc = _service(adapter)
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    # A future digital date appears; sticky provider availability blocks a reminder.
+    adapter.movies[603] = movie_details(603, digital=date(2026, 12, 1))
+    for _ in range(2):
+        title = await repo.get_title(session, MediaType.MOVIE, 603)
+        await svc.refresh_title(session, title, NOW)
+        await session.commit()
+
+    assert title.status == TitleStatus.COMPLETED.value
+    assert title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+    assert len(await _events(session, "movie:603:digital:DE")) == 0
+    assert len(await _deliveries(session)) == 0
+
+
+async def test_provider_availability_upgraded_by_past_release_date(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603)
+    adapter.providers[603] = movie_providers()
+    svc = _service(adapter)
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+    assert title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+
+    # A past release date now exists: upgrade to dated availability.
+    adapter.movies[603] = movie_details(603, available=date(2026, 8, 1))
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    await svc.refresh_title(session, title, NOW)
+    await session.commit()
+
+    assert title.status == TitleStatus.COMPLETED.value
+    assert title.available_since == date(2026, 8, 1)
+    assert title.availability_source == AvailabilitySource.RELEASE_DATE.value
+
+
+async def test_provider_discovery_withdraws_existing_reminder(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, digital=date(2026, 9, 10))
+    svc = _service(adapter)
+    await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+    assert (await _deliveries(session))[0].status == DeliveryStatus.PENDING.value
+
+    # Date removed, providers now carry the movie: withdraw the reminder.
+    adapter.movies[603] = movie_details(603)
+    adapter.providers[603] = movie_providers()
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    await svc.refresh_title(session, title, NOW)
+    await session.commit()
+
+    assert title.status == TitleStatus.COMPLETED.value
+    assert title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+    events = await _events(session, "movie:603:digital:DE")
+    assert events[0].state == EventState.WITHDRAWN.value
+    assert (await _deliveries(session))[0].status == DeliveryStatus.CANCELLED.value
+
+
+async def test_metadata_only_refresh_stores_provider_availability(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, digital=date(2026, 9, 10))
+    svc = _service(adapter)
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+    await svc.stop(session, MediaType.MOVIE, 603)
+    await session.commit()
+
+    adapter.movies[603] = movie_details(603)
+    adapter.providers[603] = movie_providers()
+    await svc.refresh_title(session, title, NOW, metadata_only=True)
+    await session.commit()
+
+    assert title.status == TitleStatus.STOPPED.value
+    assert title.available_since is None
+    assert title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+
+
+async def test_metadata_only_refresh_keeps_provider_availability_sticky(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603)
+    adapter.providers[603] = movie_providers()
+    svc = _service(adapter)
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+    await svc.stop(session, MediaType.MOVIE, 603)
+    await session.commit()
+
+    # Provider disappearance does not erase the historical release signal.
+    adapter.providers[603] = movie_providers(link_only=True)
+    await svc.refresh_title(session, title, NOW, metadata_only=True)
+    await session.commit()
+    assert title.status == TitleStatus.STOPPED.value
+    assert title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+
+    # A later future date also cannot replace sticky provider availability.
+    adapter.movies[603] = movie_details(603, digital=date(2026, 12, 1))
+    await svc.refresh_title(session, title, NOW, metadata_only=True)
+    await session.commit()
+    assert title.status == TitleStatus.STOPPED.value
+    assert title.available_since is None
+    assert title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+    assert len(await _events(session, "movie:603:digital:DE")) == 0
+    assert len(await _deliveries(session)) == 0
 
 
 async def test_tv_unknown_date_keeps_active_without_event(session):

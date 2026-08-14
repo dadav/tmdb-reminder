@@ -21,17 +21,25 @@ def build_next_release(event: ReleaseEvent | None) -> NextRelease | None:
     )
 
 
+def build_is_available(title: TrackedTitle) -> bool:
+    """A movie is available when its availability source is set (dated or undated)."""
+    if MediaType(title.media_type) != MediaType.MOVIE:
+        return False
+    return title.availability_source is not None
+
+
 def build_visible_next_release(
     title: TrackedTitle, event: ReleaseEvent | None
 ) -> NextRelease | None:
-    """Availability replaces an upcoming release only for movies."""
-    if MediaType(title.media_type) == MediaType.MOVIE and title.available_since is not None:
+    """Availability replaces an upcoming release only for available movies."""
+    if build_is_available(title):
         return None
     return build_next_release(event)
 
 
 def build_available_since(title: TrackedTitle) -> date | None:
-    """Expose availability only for movies, even if stored data is inconsistent."""
+    """Expose the availability date only for movies, even if stored data is
+    inconsistent. Undated (provider) availability returns None."""
     if MediaType(title.media_type) != MediaType.MOVIE:
         return None
     return title.available_since
@@ -52,6 +60,7 @@ def build_title_view(title: TrackedTitle, event: ReleaseEvent | None) -> TitleVi
         status=TitleStatus(title.status),
         tmdb_url=tmdb_url(media_type, title.tmdb_id),
         next_release=build_visible_next_release(title, event),
+        is_available=build_is_available(title),
         available_since=build_available_since(title),
         last_sync_status=title.last_sync_status,
         last_sync_at=title.last_sync_at,

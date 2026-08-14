@@ -15,7 +15,14 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from ..config import Settings
-from ..enums import DeliveryStatus, EventState, MediaType, SyncStatus, TitleStatus
+from ..enums import (
+    AvailabilitySource,
+    DeliveryStatus,
+    EventState,
+    MediaType,
+    SyncStatus,
+    TitleStatus,
+)
 from ..errors import CapacityExceededError, TitleNotFoundError
 from ..models import NotificationDelivery, ReleaseEvent, TrackedTitle
 from ..time_utils import (
@@ -26,6 +33,7 @@ from ..time_utils import (
 )
 from ..tmdb.adapter import TmdbAdapter
 from ..tmdb.mapping import (
+    movie_available_from_providers,
     movie_release_candidate,
     select_movie_release,
     snapshot_from_movie,
@@ -51,6 +59,7 @@ class FetchedTitle:
     snapshot: TitleSnapshot
     candidate: ReleaseCandidate | None
     available_since: date | None = None
+    availability_source: AvailabilitySource | None = None
 
 
 class TrackingService:
@@ -62,17 +71,27 @@ class TrackingService:
     # --- TMDB fetch ---
 
     async def _fetch(self, media_type: MediaType, tmdb_id: int, today) -> FetchedTitle:
-        """Fetch and normalize the title state used by reconciliation."""
+        """Fetch and normalize the title state used by reconciliation.
+
+        Release dates stay authoritative. The watch-provider fallback is consulted
+        only when release selection yields neither a past availability date nor a
+        future digital date. A provider fetch failure fails the whole fetch.
+        """
         if media_type == MediaType.MOVIE:
+            region = self.settings.tmdb_region
             details = await self.adapter.movie_details(tmdb_id)
             snapshot = snapshot_from_movie(details)
-            release = select_movie_release(
-                details.get("release_dates", {}), self.settings.tmdb_region, today
-            )
-            candidate = movie_release_candidate(
-                tmdb_id, release.next_digital_date, self.settings.tmdb_region
-            )
-            return FetchedTitle(snapshot, candidate, release.available_since)
+            release = select_movie_release(details.get("release_dates", {}), region, today)
+            candidate = movie_release_candidate(tmdb_id, release.next_digital_date, region)
+            available_since = release.available_since
+            source: AvailabilitySource | None = None
+            if available_since is not None:
+                source = AvailabilitySource.RELEASE_DATE
+            elif release.next_digital_date is None:
+                providers = await self.adapter.movie_watch_providers(tmdb_id)
+                if movie_available_from_providers(providers, region):
+                    source = AvailabilitySource.WATCH_PROVIDER
+            return FetchedTitle(snapshot, candidate, available_since, source)
         details = await self.adapter.tv_details(tmdb_id)
         snapshot = snapshot_from_tv(details)
         candidate = tv_release_candidate(tmdb_id, details, today)
@@ -118,8 +137,9 @@ class TrackingService:
         self._apply_snapshot(title, fetched.snapshot, now)
         await session.flush()
 
-        result = await self._reconcile(session, title, fetched.candidate, now)
-        self._apply_movie_lifecycle(title, fetched.available_since, result, now)
+        candidate = self._effective_movie_candidate(title, fetched)
+        result = await self._reconcile(session, title, candidate, now)
+        self._apply_movie_lifecycle(title, fetched, result, now)
         await session.flush()
         log.info(
             "title tracked",
@@ -161,13 +181,15 @@ class TrackingService:
         fetched = await self._fetch(media_type, title.tmdb_id, today)
         self._apply_snapshot(title, fetched.snapshot, now)
         if metadata_only:
-            # A dormant/stopped title only refreshes cached metadata, including the
-            # availability date, without reconciling reminders or lifecycle.
-            title.available_since = fetched.available_since
+            # A dormant/stopped title refreshes cached availability without
+            # reconciling reminders or lifecycle. Provider-confirmed availability
+            # remains sticky unless an exact past release date upgrades it.
+            self._apply_metadata_availability(title, fetched)
             await session.flush()
             return ReconcileResult(unchanged=True)
-        result = await self._reconcile(session, title, fetched.candidate, now)
-        self._apply_movie_lifecycle(title, fetched.available_since, result, now)
+        candidate = self._effective_movie_candidate(title, fetched)
+        result = await self._reconcile(session, title, candidate, now)
+        self._apply_movie_lifecycle(title, fetched, result, now)
         await session.flush()
         return result
 
@@ -264,10 +286,38 @@ class TrackingService:
 
     # --- Lifecycle ---
 
+    def _effective_movie_candidate(
+        self, title: TrackedTitle, fetched: FetchedTitle
+    ) -> ReleaseCandidate | None:
+        """Suppress reminders after provider availability proved release occurred."""
+        if (
+            MediaType(title.media_type) == MediaType.MOVIE
+            and title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+            and fetched.availability_source != AvailabilitySource.RELEASE_DATE
+        ):
+            return None
+        return fetched.candidate
+
+    def _apply_metadata_availability(self, title: TrackedTitle, fetched: FetchedTitle) -> None:
+        """Persist availability metadata without changing lifecycle state."""
+        if MediaType(title.media_type) != MediaType.MOVIE:
+            title.available_since = None
+            title.availability_source = None
+            return
+        if (
+            title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+            and fetched.availability_source != AvailabilitySource.RELEASE_DATE
+        ):
+            return
+        title.available_since = fetched.available_since
+        title.availability_source = (
+            fetched.availability_source.value if fetched.availability_source is not None else None
+        )
+
     def _apply_movie_lifecycle(
         self,
         title: TrackedTitle,
-        available_since: date | None,
+        fetched: FetchedTitle,
         result: ReconcileResult,
         now: datetime,
     ) -> None:
@@ -275,24 +325,51 @@ class TrackingService:
 
         Availability outranks a later digital release: an available movie carries
         no reminder (the reconcile withdrew any current digital event) and becomes
-        completed under revision watch. Availability disappearing clears the date
-        and reopens the movie as active. TV titles pass through unchanged.
+        completed under revision watch. Dated availability disappearing reopens the
+        movie as active; provider-confirmed availability is sticky and never
+        reopens. TV titles pass through unchanged.
         """
         if MediaType(title.media_type) != MediaType.MOVIE:
             return
 
-        was_available = title.available_since is not None
+        source = fetched.availability_source
 
-        if available_since is not None:
-            # Available now (or availability date corrected): complete and (re)watch.
-            title.available_since = available_since
-            self.complete_movie(title, available_since, now)
+        if source == AvailabilitySource.RELEASE_DATE:
+            # Dated availability (new, corrected, or upgraded from a provider one):
+            # store the date and complete under revision watch from it.
+            assert fetched.available_since is not None
+            title.available_since = fetched.available_since
+            title.availability_source = AvailabilitySource.RELEASE_DATE.value
+            self.complete_movie(title, fetched.available_since, now)
             return
 
-        if was_available:
-            # Availability disappeared: reopen for its future digital reminder (if
-            # the reconcile created one) or an unknown state.
+        if source == AvailabilitySource.WATCH_PROVIDER:
+            # Undated provider availability. On first confirmation, withdraw any
+            # reminder, complete, and start the revision-watch window from today;
+            # afterwards it is sticky and idempotent (no window reset).
+            already_sticky = (
+                title.availability_source == AvailabilitySource.WATCH_PROVIDER.value
+                and title.status == TitleStatus.COMPLETED.value
+            )
             title.available_since = None
+            title.availability_source = AvailabilitySource.WATCH_PROVIDER.value
+            if not already_sticky:
+                self.complete_movie(title, local_date(self.tz, now), now)
+            return
+
+        # No availability signal this refresh.
+        if title.availability_source == AvailabilitySource.WATCH_PROVIDER.value:
+            # Sticky: a later provider disappearance or future digital date keeps
+            # the movie completed. Candidate suppression prevents reminder creation.
+            if title.status != TitleStatus.COMPLETED.value:
+                self.complete_movie(title, local_date(self.tz, now), now)
+            return
+
+        if title.available_since is not None:
+            # Dated availability disappeared: reopen for its future digital reminder
+            # (if the reconcile created one) or an unknown state.
+            title.available_since = None
+            title.availability_source = None
             title.status = TitleStatus.ACTIVE.value
             title.revision_watch_until = None
             return

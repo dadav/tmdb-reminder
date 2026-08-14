@@ -73,6 +73,7 @@ export const en = {
     daysAgo_one: "{{count}} day ago",
     daysAgo_other: "{{count}} days ago",
     availableToday: "Available today",
+    availableNow: "Available now",
     availableSince: "Available since {{date}}",
     availabilityUnknown: "Availability unknown",
   },
@@ -127,6 +128,7 @@ export const en = {
   footer: {
     tmdbLink: "The Movie Database (TMDB)",
     notice: "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+    justwatchNotice: "Watch-provider availability data provided by",
   },
 };
 

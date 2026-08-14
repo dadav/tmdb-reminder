@@ -45,7 +45,7 @@ describe("TrackToggle (German)", () => {
       { method: "DELETE", match: (url) => url.pathname === TRACK_PATH, json: titleView("stopped") },
     ]);
     renderWithClient(
-      <TrackToggle mediaType="movie" tmdbId={603} status="completed" availableSince="2026-08-01" />,
+      <TrackToggle mediaType="movie" tmdbId={603} status="completed" isAvailable={true} />,
     );
     await userEvent.click(screen.getByRole("button", { name: "Entfernen" }));
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
@@ -53,7 +53,9 @@ describe("TrackToggle (German)", () => {
 
   it("labels a completed movie without availability Erneut merken", () => {
     installFetch([]);
-    renderWithClient(<TrackToggle mediaType="movie" tmdbId={603} status="completed" />);
+    renderWithClient(
+      <TrackToggle mediaType="movie" tmdbId={603} status="completed" isAvailable={false} />,
+    );
     expect(screen.getByRole("button", { name: "Erneut merken" })).toBeInTheDocument();
   });
 

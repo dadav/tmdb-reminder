@@ -22,6 +22,17 @@ export function Footer() {
         <img className={styles.logo} src={tmdbLogo} alt="" />
       </a>
       <p className={styles.notice}>{t("footer.notice")}</p>
+      <p className={styles.notice}>
+        {t("footer.justwatchNotice")}{" "}
+        <a
+          href="https://www.justwatch.com/"
+          target="_blank"
+          rel="noreferrer noopener"
+          className={styles.providerLink}
+        >
+          JustWatch
+        </a>
+      </p>
     </footer>
   );
 }

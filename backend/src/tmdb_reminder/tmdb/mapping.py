@@ -17,6 +17,10 @@ from ..value_objects import MovieRelease, ReleaseCandidate, TitleSnapshot
 DIGITAL_RELEASE_TYPE = 4
 AVAILABILITY_RELEASE_TYPES = frozenset({4, 5, 6})
 
+# TMDB watch-provider offering categories that count as "available now". A
+# link-only region entry (only a `link`, no offering lists) does not qualify.
+WATCH_PROVIDER_OFFERING_KEYS = ("flatrate", "free", "ads", "rent", "buy")
+
 
 def tmdb_url(media_type: MediaType, tmdb_id: int) -> str:
     return f"https://www.themoviedb.org/{media_type.value}/{tmdb_id}"
@@ -69,6 +73,27 @@ def select_movie_release(release_dates_payload: dict, region: str, today: date) 
     available_since = min(available) if available else None
     next_digital_date = min(future_digital) if future_digital and available_since is None else None
     return MovieRelease(available_since=available_since, next_digital_date=next_digital_date)
+
+
+def movie_available_from_providers(providers_payload: dict, region: str) -> bool:
+    """Whether TMDB watch providers establish undated availability in `region`.
+
+    `providers_payload` is the body of TMDB `movie/{id}/watch/providers`. A region
+    is available when its entry has a non-empty `flatrate`, `free`, `ads`, `rent`,
+    or `buy` list. Link-only entries, empty lists, malformed values, and other
+    regions are ignored.
+    """
+    results = providers_payload.get("results")
+    if not isinstance(results, dict):
+        return False
+    region_entry = results.get(region)
+    if not isinstance(region_entry, dict):
+        return False
+    for key in WATCH_PROVIDER_OFFERING_KEYS:
+        offering = region_entry.get(key)
+        if isinstance(offering, list) and len(offering) > 0:
+            return True
+    return False
 
 
 def snapshot_from_movie(details: dict) -> TitleSnapshot:

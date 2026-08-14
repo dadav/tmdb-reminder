@@ -184,13 +184,16 @@ export function availabilityLabel(
   return t("release.availableSince", { date: formatCalendarDate(availableSince, formatLocale) });
 }
 
-/** Release label for a media card. Tracked movies show availability (or an
- *  "Availability unknown" placeholder when neither availability nor a future
- *  digital date is known); TV and untracked results keep the next-release copy. */
+/** Release label for a media card. An available tracked movie shows its
+ *  availability date, or a localized "Available now" when the availability is
+ *  undated (watch-provider fallback). A tracked movie that is not available and
+ *  has no future digital date shows an "Availability unknown" placeholder. TV and
+ *  untracked results keep the next-release copy. */
 export function mediaReleaseLabel(
   params: {
     mediaType: MediaType;
     tracked: boolean;
+    isAvailable: boolean;
     availableSince: string | null | undefined;
     nextRelease: NextRelease | null | undefined;
   },
@@ -198,10 +201,13 @@ export function mediaReleaseLabel(
   t: Translate,
   context?: RelativeDateContext,
 ): string {
-  const { mediaType, tracked, availableSince, nextRelease } = params;
+  const { mediaType, tracked, isAvailable, availableSince, nextRelease } = params;
   if (mediaType === "movie" && tracked) {
-    if (availableSince) {
-      return availabilityLabel(availableSince, formatLocale, t, context);
+    if (isAvailable) {
+      if (availableSince) {
+        return availabilityLabel(availableSince, formatLocale, t, context);
+      }
+      return t("release.availableNow");
     }
     if (!nextRelease) {
       return t("release.availabilityUnknown");

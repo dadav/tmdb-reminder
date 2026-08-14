@@ -74,6 +74,7 @@ export const de: Resources = {
     daysAgo_one: "vor {{count}} Tag",
     daysAgo_other: "vor {{count}} Tagen",
     availableToday: "Heute verfügbar",
+    availableNow: "Jetzt verfügbar",
     availableSince: "Verfügbar seit {{date}}",
     availabilityUnknown: "Verfügbarkeit unbekannt",
   },
@@ -129,5 +130,6 @@ export const de: Resources = {
     tmdbLink: "The Movie Database (TMDB)",
     notice:
       "Dieses Produkt verwendet die TMDB-API, wird aber nicht von TMDB unterstützt oder zertifiziert. This product uses the TMDB API but is not endorsed or certified by TMDB.",
+    justwatchNotice: "Verfügbarkeitsdaten der Anbieter bereitgestellt von",
   },
 };

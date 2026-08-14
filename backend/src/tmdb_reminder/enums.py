@@ -21,6 +21,19 @@ class TitleStatus(StrEnum):
     STOPPED = "stopped"
 
 
+class AvailabilitySource(StrEnum):
+    """How a movie's availability was established.
+
+    `release_date` is a dated availability (a type 4/5/6 release at or before
+    today) and always carries an exact `available_since`. `watch_provider` is an
+    undated fallback derived from TMDB watch providers and carries no date. A null
+    source means availability is unknown.
+    """
+
+    RELEASE_DATE = "release_date"
+    WATCH_PROVIDER = "watch_provider"
+
+
 class EventKind(StrEnum):
     MOVIE_DIGITAL = "movie_digital"
     TV_EPISODE = "tv_episode"

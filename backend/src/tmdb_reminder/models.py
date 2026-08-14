@@ -65,6 +65,11 @@ class TrackedTitle(Base):
     # today). Null for movies not yet available and for all TV titles.
     available_since: Mapped[date | None] = mapped_column(Date)
 
+    # How availability was established (see AvailabilitySource). Null means unknown.
+    # Coupled with `available_since` by a CHECK constraint: `release_date` carries a
+    # date, `watch_provider` carries none.
+    availability_source: Mapped[str | None] = mapped_column(String(16))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
@@ -89,6 +94,12 @@ class TrackedTitle(Base):
         CheckConstraint(
             "last_sync_status IS NULL OR last_sync_status IN ('ok','error')",
             name="ck_tracked_titles_sync_status",
+        ),
+        CheckConstraint(
+            "(availability_source IS NULL AND available_since IS NULL) "
+            "OR (availability_source = 'release_date' AND available_since IS NOT NULL) "
+            "OR (availability_source = 'watch_provider' AND available_since IS NULL)",
+            name="ck_tracked_titles_availability_source",
         ),
         Index("ix_tracked_titles_status", "status"),
         Index("ix_tracked_titles_refresh", "status", "metadata_refreshed_at"),

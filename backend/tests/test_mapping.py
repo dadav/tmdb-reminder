@@ -8,6 +8,7 @@ import pytest
 
 from tmdb_reminder.enums import EventKind, MediaType
 from tmdb_reminder.tmdb.mapping import (
+    movie_available_from_providers,
     movie_release_candidate,
     select_movie_release,
     snapshot_from_movie,
@@ -134,6 +135,45 @@ def test_release_empty_when_no_qualifying_entries():
     rel = select_movie_release(payload, "DE", TODAY)
     assert rel.available_since is None
     assert rel.next_digital_date is None
+
+
+@pytest.mark.parametrize("offering", ["flatrate", "free", "ads", "rent", "buy"])
+def test_providers_available_for_each_offering_category(offering):
+    payload = {"results": {"DE": {"link": "https://x", offering: [{"provider_id": 8}]}}}
+    assert movie_available_from_providers(payload, "DE") is True
+
+
+def test_providers_ignores_other_regions():
+    payload = {"results": {"US": {"flatrate": [{"provider_id": 8}]}}}
+    assert movie_available_from_providers(payload, "DE") is False
+
+
+def test_providers_link_only_entry_not_available():
+    payload = {"results": {"DE": {"link": "https://x"}}}
+    assert movie_available_from_providers(payload, "DE") is False
+
+
+def test_providers_empty_offering_list_not_available():
+    payload = {"results": {"DE": {"link": "https://x", "flatrate": []}}}
+    assert movie_available_from_providers(payload, "DE") is False
+
+
+def test_providers_malformed_payloads_not_available():
+    assert movie_available_from_providers({}, "DE") is False
+    assert movie_available_from_providers({"results": None}, "DE") is False
+    assert movie_available_from_providers({"results": {"DE": "nope"}}, "DE") is False
+    assert movie_available_from_providers({"results": {"DE": {"flatrate": "nope"}}}, "DE") is False
+
+
+def test_providers_multiple_regions_selects_configured_region():
+    payload = {
+        "results": {
+            "US": {"flatrate": [{"provider_id": 8}]},
+            "DE": {"link": "https://x"},  # link only, not available
+        }
+    }
+    assert movie_available_from_providers(payload, "DE") is False
+    assert movie_available_from_providers(payload, "US") is True
 
 
 def test_movie_candidate_key_and_kind():

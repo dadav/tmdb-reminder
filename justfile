@@ -120,14 +120,23 @@ backend-test-full: test-db-up && test-db-down
 # Pull the published images and start the full stack (reads .env).
 # Set IMAGE_TAG in .env to select a sha-<short-commit> or v<version> tag.
 up:
-    docker compose up -d --pull always
+    docker compose pull
+    just sync-db-password
+    docker compose up -d --pull never
 
 # Build application images from the working tree and start them without pulling.
 up-local:
     docker compose pull db
     docker build -t ghcr.io/dadav/tmdb-reminder-backend:local ./backend
     docker build -t ghcr.io/dadav/tmdb-reminder-web:local ./frontend
+    just sync-db-password
     IMAGE_TAG=local docker compose up -d --pull never
+
+# Keep a persisted Postgres role aligned with the current .env password. The
+# official image only consumes POSTGRES_PASSWORD when initializing a new volume.
+sync-db-password:
+    docker compose up -d db
+    docker compose exec -T db sh -s < scripts/sync-postgres-password.sh
 
 # Stop the stack while preserving PostgreSQL data.
 down:

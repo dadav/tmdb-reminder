@@ -7,6 +7,10 @@
             "title": "App Timezone",
             "type": "string"
           },
+          "availability_delay_days": {
+            "title": "Availability Delay Days",
+            "type": "integer"
+          },
           "gotify_configured": {
             "title": "Gotify Configured",
             "type": "boolean"
@@ -39,6 +43,7 @@
           "tmdb_language",
           "app_timezone",
           "reminder_time",
+          "availability_delay_days",
           "gotify_priority"
         ],
         "title": "ConfigStatus",

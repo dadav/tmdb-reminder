@@ -102,6 +102,7 @@ class ConfigStatus(BaseModel):
     tmdb_language: str
     app_timezone: str
     reminder_time: str
+    availability_delay_days: int
     gotify_priority: int
 
 

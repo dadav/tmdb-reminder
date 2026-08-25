@@ -118,6 +118,8 @@ class ReleaseEvent(Base):
     revision: Mapped[int] = mapped_column(Integer, default=1)
     kind: Mapped[str] = mapped_column(String(20))
 
+    # Original TMDB calendar date and the configured effective availability date.
+    source_date: Mapped[date] = mapped_column(Date)
     scheduled_date: Mapped[date] = mapped_column(Date)
     season_number: Mapped[int | None] = mapped_column(Integer)
     episode_number: Mapped[int | None] = mapped_column(Integer)

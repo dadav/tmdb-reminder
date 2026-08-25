@@ -56,10 +56,53 @@ async def test_track_movie_creates_event_and_delivery(session):
     assert title.title == "The Matrix"
     events = await _events(session, "movie:603:digital:DE")
     assert len(events) == 1
+    assert events[0].source_date == date(2026, 9, 10)
     assert events[0].scheduled_date == date(2026, 9, 10)
     deliveries = await _deliveries(session)
     assert len(deliveries) == 1
     assert deliveries[0].status == DeliveryStatus.PENDING.value
+
+
+async def test_track_movie_applies_availability_delay(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, digital=NOW.date())
+    svc = _service(adapter, availability_delay_days=2)
+
+    title = await svc.track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    event = (await _events(session, "movie:603:digital:DE"))[0]
+    assert title.status == TitleStatus.ACTIVE.value
+    assert event.source_date == date(2026, 8, 12)
+    assert event.scheduled_date == date(2026, 8, 14)
+
+
+async def test_offset_change_creates_normal_movie_revision(session):
+    adapter = FakeAdapter()
+    adapter.movies[603] = movie_details(603, digital=date(2026, 9, 10))
+    await _service(adapter).track(session, MediaType.MOVIE, 603, NOW)
+    await session.commit()
+
+    first_delivery = (await _deliveries(session))[0]
+    first_delivery.status = DeliveryStatus.SENT.value
+    await session.commit()
+
+    title = await repo.get_title(session, MediaType.MOVIE, 603)
+    await _service(adapter, availability_delay_days=2).refresh_title(session, title, NOW)
+    await session.commit()
+
+    events = await _events(session, "movie:603:digital:DE")
+    assert [event.scheduled_date for event in events] == [
+        date(2026, 9, 10),
+        date(2026, 9, 12),
+    ]
+    assert events[1].source_date == date(2026, 9, 10)
+    new_delivery = next(
+        delivery
+        for delivery in await _deliveries(session)
+        if delivery.status == DeliveryStatus.PENDING.value
+    )
+    assert new_delivery.is_revised is True
 
 
 async def test_track_is_idempotent(session):
@@ -226,11 +269,33 @@ async def test_tv_episode_events_and_no_autocompletion(session):
     await session.commit()
     assert len(await _events(session, "tv:1399:s2e6")) == 1
     previous = (await _events(session, "tv:1399:s2e5"))[0]
-    assert previous.state == EventState.SUPERSEDED.value
+    assert previous.state == EventState.CURRENT.value
+    assert (await _deliveries(session))[0].status == DeliveryStatus.PENDING.value
     assert (await repo.latest_current_event_for_title(session, title.id)).source_event_key == (
-        "tv:1399:s2e6"
+        "tv:1399:s2e5"
     )
     assert title.status == TitleStatus.ACTIVE.value
+
+
+async def test_offset_change_rebases_retained_tv_episode(session):
+    adapter = FakeAdapter()
+    adapter.tvs[1399] = tv_details(1399, air_date=date(2026, 8, 13), season=2, episode=5)
+    await _service(adapter, availability_delay_days=1).track(session, MediaType.TV, 1399, NOW)
+    await session.commit()
+
+    adapter.tvs[1399] = tv_details(1399, air_date=date(2026, 8, 20), season=2, episode=6)
+    title = await repo.get_title(session, MediaType.TV, 1399)
+    await _service(adapter, availability_delay_days=3).refresh_title(session, title, NOW)
+    await session.commit()
+
+    episode_five = await _events(session, "tv:1399:s2e5")
+    assert len(episode_five) == 2
+    assert episode_five[0].state == EventState.SUPERSEDED.value
+    assert episode_five[1].state == EventState.CURRENT.value
+    assert episode_five[1].source_date == date(2026, 8, 13)
+    assert episode_five[1].scheduled_date == date(2026, 8, 16)
+    episode_six = await _events(session, "tv:1399:s2e6")
+    assert episode_six[0].scheduled_date == date(2026, 8, 23)
 
 
 async def test_metadata_only_refresh_of_stopped_title_creates_no_delivery(session):

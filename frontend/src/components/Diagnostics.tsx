@@ -65,6 +65,12 @@ export function Diagnostics() {
             <dd>{statusData.config.app_timezone}</dd>
             <dt>{t("diagnostics.reminderTime")}</dt>
             <dd>{formatReminderTime(statusData.config.reminder_time, formatLocale)}</dd>
+            <dt>{t("diagnostics.availabilityDelay")}</dt>
+            <dd>
+              {t("diagnostics.days", {
+                count: statusData.config.availability_delay_days,
+              })}
+            </dd>
             <dt>{t("diagnostics.priority")}</dt>
             <dd>{formatNumber(statusData.config.gotify_priority, formatLocale)}</dd>
           </dl>

@@ -41,6 +41,10 @@ Worker (APScheduler) ────────────────┼─▶ P
 - **Movies**: the earliest type-4 (digital) release on/after today in your region.
   After delivery or expiry a movie is *completed* but stays under daily
   revision-watch for 30 days, and reopens if a new date appears.
+- **Availability delay**: `AVAILABILITY_DELAY_DAYS` adds 0-30 calendar days to
+  dated movie and TV releases. The shifted date drives display, reminders,
+  expiry, and movie completion. The original TMDB date remains in event history
+  so changing the setting can reconcile actionable schedules as revisions.
 - **Availability precedence**: release dates are authoritative. A type 4/5/6
   release at or before today marks a movie *available now* with a date and no
   reminder. When release dates give neither a past nor a future digital date, the
@@ -50,7 +54,8 @@ Worker (APScheduler) ────────────────┼─▶ P
   never reopens tracking, but a later past release date upgrades it to a dated
   availability.
 - **TV**: uses `next_episode_to_air`; identity is series id + season + episode.
-  TV stays active across seasons and hiatuses until you stop it.
+  Delayed episodes remain actionable when TMDB advances to the next episode, so
+  multiple pending episodes can overlap. TV stays active until you stop it.
 - A changed date creates a new event **revision**; unsent prior reminders are
   cancelled and, if an earlier one was already delivered, the new one is labeled
   *revised*. A same-day reminder is labeled *late*.
@@ -67,6 +72,10 @@ cp .env.example .env       # set POSTGRES_PASSWORD, TMDB_API_KEY, GOTIFY_* etc.
 docker compose up -d        # pulls the published images from GHCR
 # open http://127.0.0.1:8080
 ```
+
+The `just up` and `just up-local` workflows reconcile the persisted PostgreSQL
+role with the current `POSTGRES_PASSWORD` before running migrations. Changing
+that value in `.env` therefore preserves the existing database volume.
 
 Compose pulls prebuilt images from GHCR
 (`ghcr.io/dadav/tmdb-reminder-backend`, `ghcr.io/dadav/tmdb-reminder-web`),
@@ -110,7 +119,7 @@ when content-level immutability is required.
 
 See [`.env.example`](.env.example). Defaults: `TMDB_REGION=DE`,
 `TMDB_LANGUAGE=en-US`, `APP_TIMEZONE=Europe/Berlin`, `REMINDER_TIME=09:00`,
-`GOTIFY_PRIORITY=5`. Secrets are environment-only.
+`AVAILABILITY_DELAY_DAYS=0`, `GOTIFY_PRIORITY=5`. Secrets are environment-only.
 
 `TMDB_LANGUAGE` controls both the TMDB content language and the browser UI
 language. English (`en-*`) and German (`de-*`) are fully localized; any other or

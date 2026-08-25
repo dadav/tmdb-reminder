@@ -58,6 +58,16 @@ def test_alembic_upgrade_and_no_drift():
                     (1, 'movie', 603, 'The Matrix', 'active', NOW(), NOW())
                 """
             )
+            conn.execute(
+                """
+                INSERT INTO release_events
+                    (id, tracked_title_id, source_event_key, revision, kind,
+                     scheduled_date, state, first_observed_at, last_observed_at)
+                VALUES
+                    (1, 1, 'movie:603:digital:DE', 1, 'movie_digital',
+                     DATE '2026-09-10', 'current', NOW(), NOW())
+                """
+            )
         # available_since exists after b47e2c9a1f30; seed a dated row for backfill.
         command.upgrade(cfg, "b47e2c9a1f30")
         with psycopg.connect(**scratch) as conn:
@@ -80,9 +90,13 @@ def test_alembic_upgrade_and_no_drift():
                 "SELECT title, available_since, availability_source "
                 "FROM tracked_titles WHERE id = 2"
             ).fetchone()
+            event = conn.execute(
+                "SELECT source_date, scheduled_date FROM release_events WHERE id = 1"
+            ).fetchone()
         # Undated row stays unknown; dated row is backfilled as release_date.
         assert row1 == ("The Matrix", None, None)
         assert row2 == ("Dune", date(2026, 1, 1), "release_date")
+        assert event == (date(2026, 9, 10), date(2026, 9, 10))
 
         # Availability invariants: source is coupled to available_since.
         with psycopg.connect(autocommit=True, **scratch) as conn:

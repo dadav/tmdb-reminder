@@ -37,6 +37,7 @@ def make_settings(**overrides) -> Settings:
         "gotify_priority": 5,
         "app_timezone": "Europe/Berlin",
         "reminder_time": "09:00",
+        "availability_delay_days": 0,
     }
     base.update(overrides)
     return Settings(**base)

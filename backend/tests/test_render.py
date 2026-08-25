@@ -17,6 +17,7 @@ def _movie_event(scheduled: date) -> tuple[TrackedTitle, ReleaseEvent]:
         source_event_key="movie:603:digital:DE",
         revision=1,
         kind=EventKind.MOVIE_DIGITAL.value,
+        source_date=scheduled,
         scheduled_date=scheduled,
     )
     return title, event
@@ -29,7 +30,7 @@ def test_movie_message_basic():
     assert msg.title == "The Matrix"
     assert "**The Matrix** (1999)" in msg.markdown
     assert "Digital release" in msg.markdown
-    assert "Release date: 2026-09-10" in msg.markdown
+    assert "Expected availability: 2026-09-10" in msg.markdown
     assert "https://www.themoviedb.org/movie/603" in msg.markdown
     assert msg.priority == 5
 
@@ -64,6 +65,7 @@ def test_tv_identity_line():
         source_event_key="tv:1399:s2e5",
         revision=1,
         kind=EventKind.TV_EPISODE.value,
+        source_date=date(2026, 9, 1),
         scheduled_date=date(2026, 9, 1),
         season_number=2,
         episode_number=5,

@@ -34,13 +34,13 @@ class TitleSnapshot:
 class MovieRelease:
     """Region-scoped movie availability derived from TMDB release dates.
 
-    `available_since` is the earliest qualifying digital/physical/TV release at or
-    before today. `next_digital_date` is the earliest future digital date and is
-    only set when the movie is not already available (availability outranks it).
+    Dates exposed as availability or schedules include the configured delay.
+    `next_digital_source_date` preserves the original TMDB date for reconciliation.
     """
 
     available_since: date | None
     next_digital_date: date | None
+    next_digital_source_date: date | None
 
 
 @dataclass(config=_cfg)
@@ -53,6 +53,7 @@ class ReleaseCandidate:
 
     kind: EventKind
     source_event_key: str
+    source_date: date
     scheduled_date: date
     season_number: int | None = None
     episode_number: int | None = None

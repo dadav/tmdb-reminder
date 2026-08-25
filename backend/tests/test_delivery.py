@@ -7,10 +7,10 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import select
 
 from conftest import integration, make_settings
-from factories import FakeAdapter, FakeGotify, movie_details
-from tmdb_reminder.enums import DeliveryStatus, MediaType, TitleStatus
+from factories import FakeAdapter, FakeGotify, movie_details, tv_details
+from tmdb_reminder.enums import DeliveryStatus, EventState, MediaType, TitleStatus
 from tmdb_reminder.errors import GotifyUnavailableError
-from tmdb_reminder.models import NotificationDelivery, TrackedTitle
+from tmdb_reminder.models import NotificationDelivery, ReleaseEvent, TrackedTitle
 from tmdb_reminder.notifications.delivery import (
     DeliveryService,
     claim_delivery,
@@ -68,6 +68,26 @@ async def test_same_day_is_late(session):
     refreshed = await session.get(NotificationDelivery, delivery.id)
     assert refreshed.status == DeliveryStatus.SENT.value
     assert refreshed.sent_late is True
+
+
+async def test_sent_tv_delivery_retires_episode_event(session):
+    adapter, gotify = FakeAdapter(), FakeGotify()
+    settings = make_settings(availability_delay_days=2)
+    tracking = TrackingService(settings, adapter)
+    delivery_service = DeliveryService(settings, gotify, tracking)
+    adapter.tvs[1399] = tv_details(1399, air_date=date(2026, 8, 11), season=2, episode=5)
+    await tracking.track(session, MediaType.TV, 1399, NOW)
+    delivery = (await session.execute(select(NotificationDelivery))).scalar_one()
+    delivery.due_at = NOW - timedelta(hours=1)
+    await session.commit()
+
+    counts = await delivery_service.evaluate_due(session, NOW)
+
+    assert counts.sent == 1
+    event = (await session.execute(select(ReleaseEvent))).scalar_one()
+    assert event.source_date == date(2026, 8, 11)
+    assert event.scheduled_date == date(2026, 8, 13)
+    assert event.state == EventState.SUPERSEDED.value
 
 
 async def test_expired_delivery_completes_movie(session):

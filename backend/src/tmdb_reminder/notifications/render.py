@@ -43,7 +43,7 @@ def render_message(
         f"**{title.title}**{year}",
         "",
         _identity_line(event),
-        f"Release date: {iso_date}",
+        f"Expected availability: {iso_date}",
         "",
         f"[View on TMDB]({url})",
     ]

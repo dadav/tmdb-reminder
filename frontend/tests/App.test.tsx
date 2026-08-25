@@ -24,6 +24,7 @@ describe("Root locale authority", () => {
             tmdb_language: "",
             app_timezone: "Europe/Berlin",
             reminder_time: "09:00",
+            availability_delay_days: 0,
             gotify_priority: 5,
           },
           last_jobs: [],

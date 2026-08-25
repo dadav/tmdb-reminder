@@ -132,6 +132,8 @@ export interface components {
         ConfigStatus: {
             /** App Timezone */
             app_timezone: string;
+            /** Availability Delay Days */
+            availability_delay_days: number;
             /** Gotify Configured */
             gotify_configured: boolean;
             /** Gotify Priority */

@@ -145,6 +145,7 @@ class DeliveryService:
             delivery.lease_expires_at = None
             counts.expired += 1
             self._maybe_complete_movie(event, title, now)
+            self._maybe_retire_tv_event(event)
             await session.commit()
             log.info("delivery expired", extra={"delivery_id": delivery.id, "title_id": title.id})
             return
@@ -188,6 +189,7 @@ class DeliveryService:
         claimed.last_error = None
         counts.sent += 1
         self._maybe_complete_movie(event, title, now)
+        self._maybe_retire_tv_event(event)
         await session.commit()
         log.info(
             "delivery sent",
@@ -210,3 +212,12 @@ class DeliveryService:
         if title.status == TitleStatus.STOPPED.value:
             return
         self.tracking.complete_movie(title, event.scheduled_date, now)
+
+    @staticmethod
+    def _maybe_retire_tv_event(event: ReleaseEvent) -> None:
+        """A delayed TV episode remains current until its delivery is terminal."""
+        if event.kind != EventKind.TV_EPISODE.value:
+            return
+        if event.state != EventState.CURRENT.value:
+            return
+        event.state = EventState.SUPERSEDED.value

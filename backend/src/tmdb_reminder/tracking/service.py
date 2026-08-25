@@ -18,6 +18,7 @@ from ..config import Settings
 from ..enums import (
     AvailabilitySource,
     DeliveryStatus,
+    EventKind,
     EventState,
     MediaType,
     SyncStatus,
@@ -81,8 +82,18 @@ class TrackingService:
             region = self.settings.tmdb_region
             details = await self.adapter.movie_details(tmdb_id)
             snapshot = snapshot_from_movie(details)
-            release = select_movie_release(details.get("release_dates", {}), region, today)
-            candidate = movie_release_candidate(tmdb_id, release.next_digital_date, region)
+            release = select_movie_release(
+                details.get("release_dates", {}),
+                region,
+                today,
+                self.settings.availability_delay_days,
+            )
+            candidate = movie_release_candidate(
+                tmdb_id,
+                release.next_digital_source_date,
+                release.next_digital_date,
+                region,
+            )
             available_since = release.available_since
             source: AvailabilitySource | None = None
             if available_since is not None:
@@ -94,7 +105,9 @@ class TrackingService:
             return FetchedTitle(snapshot, candidate, available_since, source)
         details = await self.adapter.tv_details(tmdb_id)
         snapshot = snapshot_from_tv(details)
-        candidate = tv_release_candidate(tmdb_id, details, today)
+        candidate = tv_release_candidate(
+            tmdb_id, details, today, self.settings.availability_delay_days
+        )
         return FetchedTitle(snapshot, candidate)
 
     # --- Public operations ---
@@ -178,6 +191,8 @@ class TrackingService:
         """Re-fetch metadata and reconcile the current release. Raises on TMDB failure."""
         today = local_date(self.tz, now)
         media_type = MediaType(title.media_type)
+        if not metadata_only:
+            await self._rebase_current_tv_events(session, title, now)
         fetched = await self._fetch(media_type, title.tmdb_id, today)
         self._apply_snapshot(title, fetched.snapshot, now)
         if metadata_only:
@@ -201,9 +216,6 @@ class TrackingService:
         if candidate is None:
             return await self._reconcile_absent(session, title, now)
 
-        if MediaType(title.media_type) == MediaType.TV:
-            await self._retire_previous_tv_events(session, title.id, candidate.source_event_key)
-
         key = candidate.source_event_key
         cur = await repo.current_event(session, key)
 
@@ -213,7 +225,10 @@ class TrackingService:
             await self._create_event(session, title, candidate, next_rev, revised, now)
             return ReconcileResult(created=True)
 
-        if cur.scheduled_date == candidate.scheduled_date:
+        if (
+            cur.source_date == candidate.source_date
+            and cur.scheduled_date == candidate.scheduled_date
+        ):
             cur.last_observed_at = now
             return ReconcileResult(unchanged=True)
 
@@ -224,15 +239,29 @@ class TrackingService:
         await self._create_event(session, title, candidate, cur.revision + 1, revised, now)
         return ReconcileResult(superseded=True, created=True)
 
-    async def _retire_previous_tv_events(
-        self, session, title_id: int, current_source_key: str
-    ) -> None:
-        """Only TMDB's latest next episode may remain current for a TV title."""
-        for event in await repo.current_events_for_title(session, title_id):
-            if event.source_event_key == current_source_key:
+    async def _rebase_current_tv_events(self, session, title: TrackedTitle, now: datetime) -> None:
+        """Apply the current delay to TV episodes no longer returned by TMDB.
+
+        Delayed episode deliveries remain actionable after `next_episode_to_air`
+        advances, so their original source dates must be rebased independently.
+        """
+        if MediaType(title.media_type) != MediaType.TV:
+            return
+        for event in await repo.current_events_for_title(session, title.id):
+            scheduled_date = event.source_date + timedelta(
+                days=self.settings.availability_delay_days
+            )
+            if event.scheduled_date == scheduled_date:
                 continue
-            event.state = EventState.SUPERSEDED.value
-            await self._cancel_unsent_for_event(session, event.id)
+            candidate = ReleaseCandidate(
+                kind=EventKind(event.kind),
+                source_event_key=event.source_event_key,
+                source_date=event.source_date,
+                scheduled_date=scheduled_date,
+                season_number=event.season_number,
+                episode_number=event.episode_number,
+            )
+            await self._reconcile(session, title, candidate, now)
 
     async def _reconcile_absent(
         self, session, title: TrackedTitle, now: datetime
@@ -263,6 +292,7 @@ class TrackingService:
             source_event_key=candidate.source_event_key,
             revision=revision,
             kind=candidate.kind.value,
+            source_date=candidate.source_date,
             scheduled_date=candidate.scheduled_date,
             season_number=candidate.season_number,
             episode_number=candidate.episode_number,

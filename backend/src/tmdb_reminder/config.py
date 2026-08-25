@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # --- Scheduling / timezone ---
     app_timezone: str = "Europe/Berlin"
     reminder_time: str = "09:00"
+    availability_delay_days: int = Field(default=0, ge=0, le=30)
 
     # --- Lifecycle windows ---
     revision_watch_days: int = 30

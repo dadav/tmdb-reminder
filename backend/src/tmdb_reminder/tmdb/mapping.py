@@ -7,7 +7,7 @@ testable without network or database.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from ..enums import EventKind, MediaType
 from ..value_objects import MovieRelease, ReleaseCandidate, TitleSnapshot
@@ -43,21 +43,25 @@ def _parse_iso_date(value: str | None) -> date | None:
         return None
 
 
-def select_movie_release(release_dates_payload: dict, region: str, today: date) -> MovieRelease:
+def select_movie_release(
+    release_dates_payload: dict,
+    region: str,
+    today: date,
+    availability_delay_days: int = 0,
+) -> MovieRelease:
     """Region-scoped availability and next-digital date for a movie.
 
     `release_dates_payload` is the body of TMDB `movie/{id}/release_dates`.
 
-    - `available_since`: earliest type 4/5/6 (digital/physical/TV) date in
-      `region` at or before `today`.
-    - `next_digital_date`: earliest type-4 date strictly after `today`, only when
-      the movie is not already available (availability outranks a later digital
-      release).
+    The configured calendar-day delay is applied before comparison with `today`.
+    `available_since` is the earliest effective type 4/5/6 date at or before
+    today. `next_digital_date` is the earliest effective future type-4 date and
+    is only set when the movie is not already available.
 
     Other regions, theatrical types 1-3, and missing/malformed dates are ignored.
     """
     available: list[date] = []
-    future_digital: list[date] = []
+    future_digital: list[tuple[date, date]] = []
     for entry in release_dates_payload.get("results", []):
         if entry.get("iso_3166_1") != region:
             continue
@@ -66,13 +70,18 @@ def select_movie_release(release_dates_payload: dict, region: str, today: date) 
             parsed = _parse_iso_date(rel.get("release_date"))
             if parsed is None:
                 continue
-            if rel_type in AVAILABILITY_RELEASE_TYPES and parsed <= today:
-                available.append(parsed)
-            if rel_type == DIGITAL_RELEASE_TYPE and parsed > today:
-                future_digital.append(parsed)
+            effective = parsed + timedelta(days=availability_delay_days)
+            if rel_type in AVAILABILITY_RELEASE_TYPES and effective <= today:
+                available.append(effective)
+            if rel_type == DIGITAL_RELEASE_TYPE and effective > today:
+                future_digital.append((effective, parsed))
     available_since = min(available) if available else None
-    next_digital_date = min(future_digital) if future_digital and available_since is None else None
-    return MovieRelease(available_since=available_since, next_digital_date=next_digital_date)
+    next_pair = min(future_digital) if future_digital and available_since is None else None
+    return MovieRelease(
+        available_since=available_since,
+        next_digital_date=next_pair[0] if next_pair else None,
+        next_digital_source_date=next_pair[1] if next_pair else None,
+    )
 
 
 def movie_available_from_providers(providers_payload: dict, region: str) -> bool:
@@ -121,23 +130,29 @@ def snapshot_from_tv(details: dict) -> TitleSnapshot:
 
 
 def movie_release_candidate(
-    tmdb_id: int, digital_date: date | None, region: str
+    tmdb_id: int,
+    digital_source_date: date | None,
+    digital_date: date | None,
+    region: str,
 ) -> ReleaseCandidate | None:
     if digital_date is None:
         return None
     return ReleaseCandidate(
         kind=EventKind.MOVIE_DIGITAL,
         source_event_key=f"movie:{tmdb_id}:digital:{region}",
+        source_date=digital_source_date or digital_date,
         scheduled_date=digital_date,
     )
 
 
-def tv_release_candidate(tmdb_id: int, details: dict, today: date) -> ReleaseCandidate | None:
+def tv_release_candidate(
+    tmdb_id: int, details: dict, today: date, availability_delay_days: int = 0
+) -> ReleaseCandidate | None:
     """Derive the current TV episode event from `next_episode_to_air`.
 
     Identity is the series id plus season and episode numbers. An unknown air
-    date yields no candidate; the title stays active for daily polling. A past
-    air date is ignored (the episode already aired).
+    date yields no candidate. The source air date is ignored only when its
+    delayed effective date is already in the past.
     """
     nxt = details.get("next_episode_to_air")
     if not nxt:
@@ -145,12 +160,16 @@ def tv_release_candidate(tmdb_id: int, details: dict, today: date) -> ReleaseCan
     season = nxt.get("season_number")
     episode = nxt.get("episode_number")
     air = _parse_iso_date(nxt.get("air_date"))
-    if season is None or episode is None or air is None or air < today:
+    if season is None or episode is None or air is None:
+        return None
+    effective = air + timedelta(days=availability_delay_days)
+    if effective < today:
         return None
     return ReleaseCandidate(
         kind=EventKind.TV_EPISODE,
         source_event_key=f"tv:{tmdb_id}:s{int(season)}e{int(episode)}",
-        scheduled_date=air,
+        source_date=air,
+        scheduled_date=effective,
         season_number=int(season),
         episode_number=int(episode),
     )

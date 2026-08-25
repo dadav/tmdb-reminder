@@ -35,6 +35,7 @@ async def status(
         tmdb_language=settings.tmdb_language,
         app_timezone=settings.app_timezone,
         reminder_time=settings.reminder_time,
+        availability_delay_days=settings.availability_delay_days,
         gotify_priority=settings.gotify_priority,
     )
     jobs = await repo.latest_job_runs(session)

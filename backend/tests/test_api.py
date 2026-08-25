@@ -89,6 +89,17 @@ async def test_concurrent_track_requests_are_idempotent(database):
         assert tracked.json()["total"] == 1
 
 
+async def test_api_exposes_effective_date_and_delay_configuration(database):
+    async with make_api(database, availability_delay_days=2) as (client, adapter, _gotify):
+        adapter.movies[603] = movie_details(603, digital=date(2026, 9, 10))
+
+        tracked = await client.put("/api/v1/tracked-titles/movie/603")
+        status = await client.get("/api/v1/status")
+
+        assert tracked.json()["next_release"]["scheduled_date"] == "2026-09-12"
+        assert status.json()["config"]["availability_delay_days"] == 2
+
+
 async def test_pagination(database):
     async with make_api(database) as (client, adapter, _gotify):
         for i in range(5):
@@ -242,6 +253,7 @@ async def test_status_and_gotify_test(database):
         data = r.json()
         assert data["config"]["tmdb_region"] == "DE"
         assert data["config"]["gotify_configured"] is True
+        assert data["config"]["availability_delay_days"] == 0
         assert "tmdb_api_key" not in str(data)
 
         t = await client.post("/api/v1/status/gotify-test")

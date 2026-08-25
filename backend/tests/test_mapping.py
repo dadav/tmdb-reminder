@@ -42,6 +42,7 @@ def test_future_digital_selected_in_region():
     rel = select_movie_release(payload, "DE", TODAY)
     assert rel.available_since is None
     assert rel.next_digital_date == date(2026, 9, 10)
+    assert rel.next_digital_source_date == date(2026, 9, 10)
 
 
 def test_next_digital_picks_earliest_future():
@@ -69,6 +70,26 @@ def test_available_when_qualifying_type_at_or_before_today(release_type):
 def test_digital_today_is_availability_not_reminder():
     payload = _release_dates({"DE": [{"type": 4, "release_date": "2026-08-12"}]})
     rel = select_movie_release(payload, "DE", TODAY)
+    assert rel.available_since == TODAY
+    assert rel.next_digital_date is None
+
+
+@pytest.mark.parametrize("release_type", [4, 5, 6])
+def test_delay_shifts_all_movie_availability_types(release_type):
+    payload = _release_dates({"DE": [{"type": release_type, "release_date": "2026-08-12"}]})
+    rel = select_movie_release(payload, "DE", TODAY, availability_delay_days=1)
+    assert rel.available_since is None
+    if release_type == 4:
+        assert rel.next_digital_source_date == TODAY
+        assert rel.next_digital_date == date(2026, 8, 13)
+    else:
+        assert rel.next_digital_source_date is None
+        assert rel.next_digital_date is None
+
+
+def test_shifted_movie_date_becomes_available_on_effective_day():
+    payload = _release_dates({"DE": [{"type": 4, "release_date": "2026-08-11"}]})
+    rel = select_movie_release(payload, "DE", TODAY, availability_delay_days=1)
     assert rel.available_since == TODAY
     assert rel.next_digital_date is None
 
@@ -177,15 +198,18 @@ def test_providers_multiple_regions_selects_configured_region():
 
 
 def test_movie_candidate_key_and_kind():
-    cand = movie_release_candidate(603, date(2026, 9, 5), "DE")
+    source = date(2026, 9, 4)
+    effective = date(2026, 9, 5)
+    cand = movie_release_candidate(603, source, effective, "DE")
     assert cand is not None
     assert cand.kind == EventKind.MOVIE_DIGITAL
     assert cand.source_event_key == "movie:603:digital:DE"
-    assert cand.scheduled_date == date(2026, 9, 5)
+    assert cand.source_date == source
+    assert cand.scheduled_date == effective
 
 
 def test_movie_candidate_none_without_date():
-    assert movie_release_candidate(603, None, "DE") is None
+    assert movie_release_candidate(603, None, None, "DE") is None
 
 
 def test_tv_candidate_identity():
@@ -203,7 +227,22 @@ def test_tv_candidate_identity():
     assert cand.source_event_key == "tv:1399:s2e5"
     assert cand.season_number == 2
     assert cand.episode_number == 5
+    assert cand.source_date == date(2026, 9, 1)
     assert cand.scheduled_date == date(2026, 9, 1)
+
+
+def test_tv_candidate_uses_effective_date_after_source_date_passes():
+    details = {
+        "next_episode_to_air": {
+            "air_date": "2026-08-11",
+            "season_number": 2,
+            "episode_number": 5,
+        }
+    }
+    cand = tv_release_candidate(1399, details, TODAY, availability_delay_days=2)
+    assert cand is not None
+    assert cand.source_date == date(2026, 8, 11)
+    assert cand.scheduled_date == date(2026, 8, 13)
 
 
 def test_tv_candidate_none_when_no_next_episode():

@@ -20,6 +20,7 @@ function statusPayload(overrides: Record<string, unknown> = {}) {
       tmdb_language: "de-DE",
       app_timezone: "Europe/Berlin",
       reminder_time: "09:00",
+      availability_delay_days: 2,
       gotify_priority: 5,
     },
     last_jobs: [
@@ -43,6 +44,8 @@ describe("Diagnostics (German)", () => {
     expect(screen.getByRole("heading", { name: "Diagnose" })).toBeInTheDocument();
     expect(screen.getByText("Konfiguration")).toBeInTheDocument();
     expect(screen.getByText("Zeitzone")).toBeInTheDocument();
+    expect(screen.getByText("Verfügbarkeitsverzögerung")).toBeInTheDocument();
+    expect(screen.getByText("2 Tage")).toBeInTheDocument();
     // The known job name "refresh" is translated.
     expect(screen.getByText(/Aktualisierung/)).toBeInTheDocument();
   });

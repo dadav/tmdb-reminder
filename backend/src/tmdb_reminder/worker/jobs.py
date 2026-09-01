@@ -39,11 +39,11 @@ class Jobs:
         self.delivery = delivery
         self.tz = settings.timezone
 
-    async def _open_run(self, session, job_name: JobName, cid: str, now: datetime) -> JobRun:
+    async def _open_run(self, session, job_name: JobName, cid: str, now: datetime) -> int:
         run = JobRun(job_name=job_name.value, correlation_id=cid, started_at=now)
         session.add(run)
         await session.commit()
-        return run
+        return run.id
 
     async def run_refresh(self, now: datetime | None = None) -> JobRun:
         now = now or utc_now()
@@ -51,7 +51,7 @@ class Jobs:
         token = correlation_id.set(cid)
         try:
             async with self.db.session_factory() as session:
-                run = await self._open_run(session, JobName.REFRESH, cid, now)
+                run_id = await self._open_run(session, JobName.REFRESH, cid, now)
                 titles = await repo.titles_for_refresh(
                     session, now, self.settings.dormant_refresh_days
                 )
@@ -65,13 +65,13 @@ class Jobs:
                     failures += 1
                     last_error = err
             outcome = _outcome(processed, failures)
-            await self._close_run(run.id, now, outcome, processed, last_error if failures else None)
+            await self._close_run(run_id, now, outcome, processed, last_error if failures else None)
             log.info(
                 "refresh job finished",
                 extra={"processed": processed, "failures": failures, "outcome": outcome.value},
             )
             async with self.db.session_factory() as session:
-                return await session.get(JobRun, run.id)  # type: ignore[return-value]
+                return await session.get(JobRun, run_id)  # type: ignore[return-value]
         finally:
             correlation_id.reset(token)
 
@@ -109,14 +109,14 @@ class Jobs:
         token = correlation_id.set(cid)
         try:
             async with self.db.session_factory() as session:
-                run = await self._open_run(session, JobName.DELIVERY, cid, now)
+                run_id = await self._open_run(session, JobName.DELIVERY, cid, now)
                 counts = await self.delivery.evaluate_due(session, now)
             outcome = JobOutcome.PARTIAL if counts.failed else JobOutcome.SUCCESS
             summary = ",".join(counts.errors) if counts.errors else None
-            await self._close_run(run.id, now, outcome, counts.processed, summary)
+            await self._close_run(run_id, now, outcome, counts.processed, summary)
             log.info("delivery job finished", extra={"counts": counts.__dict__})
             async with self.db.session_factory() as session:
-                return await session.get(JobRun, run.id)  # type: ignore[return-value]
+                return await session.get(JobRun, run_id)  # type: ignore[return-value]
         finally:
             correlation_id.reset(token)
 

@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from conftest import integration, make_settings
 from factories import FakeAdapter, FakeGotify, movie_details, tv_details
+from tmdb_reminder.api.views import build_title_view
 from tmdb_reminder.enums import DeliveryStatus, EventState, MediaType, TitleStatus
 from tmdb_reminder.errors import GotifyUnavailableError
 from tmdb_reminder.models import NotificationDelivery, ReleaseEvent, TrackedTitle
@@ -18,6 +19,7 @@ from tmdb_reminder.notifications.delivery import (
 )
 from tmdb_reminder.tracking import repository as repo
 from tmdb_reminder.tracking.service import TrackingService
+from tmdb_reminder.worker.jobs import Jobs
 
 pytestmark = integration
 
@@ -70,7 +72,7 @@ async def test_same_day_is_late(session):
     assert refreshed.sent_late is True
 
 
-async def test_sent_tv_delivery_retires_episode_event(session):
+async def test_sent_tv_delivery_stays_current_until_release_day_expires(session):
     adapter, gotify = FakeAdapter(), FakeGotify()
     settings = make_settings(availability_delay_days=2)
     tracking = TrackingService(settings, adapter)
@@ -87,6 +89,112 @@ async def test_sent_tv_delivery_retires_episode_event(session):
     event = (await session.execute(select(ReleaseEvent))).scalar_one()
     assert event.source_date == date(2026, 8, 11)
     assert event.scheduled_date == date(2026, 8, 13)
+    assert event.state == EventState.CURRENT.value
+    assert await repo.latest_current_event_for_title(session, event.tracked_title_id) == event
+    title = await session.get(TrackedTitle, event.tracked_title_id)
+    assert title is not None
+    assert build_title_view(title, event).next_release is not None
+
+    after_expiry = delivery.expiry_at + timedelta(seconds=1)
+    expiry_counts = await delivery_service.evaluate_due(session, after_expiry)
+
+    await session.refresh(event)
+    assert event.state == EventState.SUPERSEDED.value
+    assert expiry_counts.retired == 1
+    assert await repo.latest_current_event_for_title(session, event.tracked_title_id) is None
+
+    repeated_counts = await delivery_service.evaluate_due(session, after_expiry)
+    assert repeated_counts.retired == 0
+
+
+async def test_elapsed_tv_event_reveals_later_current_episode(session):
+    adapter, gotify = FakeAdapter(), FakeGotify()
+    settings = make_settings(availability_delay_days=2)
+    tracking = TrackingService(settings, adapter)
+    delivery_service = DeliveryService(settings, gotify, tracking)
+    adapter.tvs[1399] = tv_details(1399, air_date=date(2026, 8, 11), season=2, episode=5)
+    title = await tracking.track(session, MediaType.TV, 1399, NOW)
+    await session.commit()
+
+    adapter.tvs[1399] = tv_details(1399, air_date=date(2026, 8, 18), season=2, episode=6)
+    await tracking.refresh_title(session, title, NOW)
+    await session.commit()
+
+    episode_five = (
+        await session.execute(
+            select(ReleaseEvent).where(ReleaseEvent.source_event_key == "tv:1399:s2e5")
+        )
+    ).scalar_one()
+    episode_six = (
+        await session.execute(
+            select(ReleaseEvent).where(ReleaseEvent.source_event_key == "tv:1399:s2e6")
+        )
+    ).scalar_one()
+    delivery = (
+        await session.execute(
+            select(NotificationDelivery).where(
+                NotificationDelivery.release_event_id == episode_five.id
+            )
+        )
+    ).scalar_one()
+    delivery.status = DeliveryStatus.SENT.value
+    delivery.expiry_at = NOW - timedelta(seconds=1)
+    await session.commit()
+
+    counts = await delivery_service.evaluate_due(session, NOW)
+
+    await session.refresh(episode_five)
+    assert counts.retired == 1
+    assert episode_five.state == EventState.SUPERSEDED.value
+    assert episode_six.state == EventState.CURRENT.value
+    assert await repo.latest_current_event_for_title(session, title.id) == episode_six
+
+
+async def test_expired_tv_delivery_retires_episode_event(session):
+    adapter, gotify = FakeAdapter(), FakeGotify()
+    settings = make_settings(availability_delay_days=2)
+    tracking = TrackingService(settings, adapter)
+    delivery_service = DeliveryService(settings, gotify, tracking)
+    adapter.tvs[1399] = tv_details(1399, air_date=date(2026, 8, 11), season=2, episode=5)
+    await tracking.track(session, MediaType.TV, 1399, NOW)
+    delivery = (await session.execute(select(NotificationDelivery))).scalar_one()
+    delivery.due_at = NOW - timedelta(hours=2)
+    delivery.expiry_at = NOW - timedelta(hours=1)
+    await session.commit()
+
+    counts = await delivery_service.evaluate_due(session, NOW)
+
+    event = (await session.execute(select(ReleaseEvent))).scalar_one()
+    assert counts.expired == 1
+    assert counts.retired == 1
+    assert delivery.status == DeliveryStatus.EXPIRED.value
+    assert event.state == EventState.SUPERSEDED.value
+
+
+async def test_cancelled_tv_delivery_retires_only_after_release_day(session):
+    adapter, gotify = FakeAdapter(), FakeGotify()
+    settings = make_settings(availability_delay_days=2)
+    tracking = TrackingService(settings, adapter)
+    delivery_service = DeliveryService(settings, gotify, tracking)
+    adapter.tvs[1399] = tv_details(1399, air_date=date(2026, 8, 11), season=2, episode=5)
+    await tracking.track(session, MediaType.TV, 1399, NOW)
+    await tracking.stop(session, MediaType.TV, 1399)
+    await session.commit()
+
+    event = (await session.execute(select(ReleaseEvent))).scalar_one()
+    delivery = (await session.execute(select(NotificationDelivery))).scalar_one()
+    before_expiry = await delivery_service.evaluate_due(session, NOW)
+
+    assert delivery.status == DeliveryStatus.CANCELLED.value
+    assert event.state == EventState.CURRENT.value
+    assert before_expiry.retired == 0
+
+    after_expiry = await delivery_service.evaluate_due(
+        session, delivery.expiry_at + timedelta(seconds=1)
+    )
+
+    await session.refresh(event)
+    assert after_expiry.retired == 1
     assert event.state == EventState.SUPERSEDED.value
 
 
@@ -158,6 +266,28 @@ async def test_gotify_not_configured_leaves_pending(session):
     assert counts.skipped == 1
     refreshed = await session.get(NotificationDelivery, delivery_id)
     assert refreshed.status == DeliveryStatus.PENDING.value
+
+
+async def test_delivery_job_survives_session_rollback(session, database):
+    adapter, gotify = FakeAdapter(), FakeGotify()
+    settings = make_settings(
+        availability_delay_days=2,
+        gotify_url=None,
+        gotify_token=None,
+    )
+    tracking = TrackingService(settings, adapter)
+    delivery_service = DeliveryService(settings, gotify, tracking)
+    jobs = Jobs(settings, database, tracking, delivery_service)
+    adapter.tvs[1399] = tv_details(1399, air_date=date(2026, 8, 11), season=2, episode=5)
+    await tracking.track(session, MediaType.TV, 1399, NOW)
+    delivery = (await session.execute(select(NotificationDelivery))).scalar_one()
+    delivery.due_at = NOW - timedelta(hours=1)
+    await session.commit()
+
+    run = await jobs.run_delivery(NOW)
+
+    assert run.outcome == "success"
+    assert run.processed_count == 1
 
 
 async def test_concurrent_claim_only_one_wins(session, database):

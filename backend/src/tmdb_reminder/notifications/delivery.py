@@ -40,6 +40,7 @@ class DeliveryCounts:
     failed: int = 0
     skipped: int = 0
     recovered: int = 0
+    retired: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -82,6 +83,32 @@ async def claim_delivery(
     return delivery
 
 
+async def retire_elapsed_tv_events(session, now: datetime) -> int:
+    """Retire terminal TV events after their configured release day ends."""
+    stmt = (
+        select(ReleaseEvent)
+        .join(NotificationDelivery)
+        .where(
+            ReleaseEvent.kind == EventKind.TV_EPISODE.value,
+            ReleaseEvent.state == EventState.CURRENT.value,
+            NotificationDelivery.status.in_(
+                [
+                    DeliveryStatus.SENT.value,
+                    DeliveryStatus.EXPIRED.value,
+                    DeliveryStatus.CANCELLED.value,
+                ]
+            ),
+            NotificationDelivery.expiry_at <= now,
+        )
+        .with_for_update(skip_locked=True, of=ReleaseEvent)
+    )
+    events = (await session.execute(stmt)).scalars().unique().all()
+    for event in events:
+        event.state = EventState.SUPERSEDED.value
+    await session.commit()
+    return len(events)
+
+
 class DeliveryService:
     def __init__(self, settings: Settings, gotify: GotifyClient, tracking: TrackingService) -> None:
         self.settings = settings
@@ -99,6 +126,7 @@ class DeliveryService:
         for delivery in due:
             counts.processed += 1
             await self._process_one(session, delivery.id, now, counts)
+        counts.retired = await retire_elapsed_tv_events(session, now)
         return counts
 
     async def _process_one(
@@ -145,7 +173,6 @@ class DeliveryService:
             delivery.lease_expires_at = None
             counts.expired += 1
             self._maybe_complete_movie(event, title, now)
-            self._maybe_retire_tv_event(event)
             await session.commit()
             log.info("delivery expired", extra={"delivery_id": delivery.id, "title_id": title.id})
             return
@@ -189,7 +216,6 @@ class DeliveryService:
         claimed.last_error = None
         counts.sent += 1
         self._maybe_complete_movie(event, title, now)
-        self._maybe_retire_tv_event(event)
         await session.commit()
         log.info(
             "delivery sent",
@@ -212,12 +238,3 @@ class DeliveryService:
         if title.status == TitleStatus.STOPPED.value:
             return
         self.tracking.complete_movie(title, event.scheduled_date, now)
-
-    @staticmethod
-    def _maybe_retire_tv_event(event: ReleaseEvent) -> None:
-        """A delayed TV episode remains current until its delivery is terminal."""
-        if event.kind != EventKind.TV_EPISODE.value:
-            return
-        if event.state != EventState.CURRENT.value:
-            return
-        event.state = EventState.SUPERSEDED.value

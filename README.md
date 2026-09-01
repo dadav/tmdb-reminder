@@ -55,7 +55,9 @@ Worker (APScheduler) ────────────────┼─▶ P
   availability.
 - **TV**: uses `next_episode_to_air`; identity is series id + season + episode.
   Delayed episodes remain actionable when TMDB advances to the next episode, so
-  multiple pending episodes can overlap. TV stays active until you stop it.
+  multiple episodes can overlap. A notified episode remains the visible next
+  release through its effective release day, then the hourly worker retires it
+  and reveals the next known episode. TV stays active until you stop it.
 - A changed date creates a new event **revision**; unsent prior reminders are
   cancelled and, if an earlier one was already delivered, the new one is labeled
   *revised*. A same-day reminder is labeled *late*.
